@@ -229,14 +229,9 @@
     <h3>🎛 选中贴花</h3>
     <div id="decal-controls" class="disabled">
       <div class="ctrl-row">
-        <label>宽度</label>
-        <input type="range" id="ctrl-width" min="0.05" max="5" step="0.01" value="0.6">
-        <span class="val" id="val-width">0.60</span>
-      </div>
-      <div class="ctrl-row">
-        <label>高度</label>
-        <input type="range" id="ctrl-height" min="0.05" max="5" step="0.01" value="0.4">
-        <span class="val" id="val-height">0.40</span>
+        <label>缩放</label>
+        <input type="range" id="ctrl-scale" min="10" max="400" step="5" value="100">
+        <span class="val" id="val-scale">100%</span>
       </div>
       <div class="ctrl-row">
         <label>旋转</label>
@@ -320,7 +315,7 @@ const state = {
   model: null,
   carMeshes: [],       // all meshes from GLB (for raycasting)
   decalLibrary: [],    // { id, name, texture, element }
-  decalObjects: [],    // { id, libId, mesh, texture, width, height, rotation }
+  decalObjects: [],    // { id, libId, mesh, texture, scale, aspect, rotation }
   selectedDecal: null, // id of selected placed decal
   activeLibId: null,   // which library decal is selected for placement
   carBounds: null,
@@ -354,7 +349,7 @@ controls.maxPolarAngle = Math.PI * 0.8;
 controls.update();
 
 // Lighting — balanced from all six directions
-scene.add(new THREE.AmbientLight('#ffffff', 1.0));
+scene.add(new THREE.AmbientLight('#ffffff', 0.6));
 
 function addLight(color, intensity, x, y, z) {
   const l = new THREE.DirectionalLight(color, intensity);
@@ -362,12 +357,12 @@ function addLight(color, intensity, x, y, z) {
   scene.add(l);
   return l;
 }
-addLight('#ffffff', 2.0,  0, 5,  4);  // front
-addLight('#ffffff', 2.0,  0, 5, -4);  // back
-addLight('#ffffff', 2.0,  4, 5,  0);  // right
-addLight('#ffffff', 2.0, -4, 5,  0);  // left
-addLight('#ffffff', 1.5,  0, 8,  0);  // top
-addLight('#ffffff', 0.5,  0,-2,  0);  // bottom
+addLight('#ffffff', 1.5,  0, 5,  4);  // front
+addLight('#ffffff', 1.5,  0, 5, -4);  // back
+addLight('#ffffff', 1.5,  4, 5,  0);  // right
+addLight('#ffffff', 1.5, -4, 5,  0);  // left
+addLight('#ffffff', 1.2,  0, 8,  0);  // top
+addLight('#ffffff', 0.4,  0,-2,  0);  // bottom
 
 // Ground (simple plane, no shadows)
 const ground = new THREE.Mesh(
@@ -414,9 +409,18 @@ function computeDecalOrientation(normal, rotationDeg) {
 }
 
 function addDecalToScene(intersect, libDecal) {
-  const width = parseFloat(document.getElementById('ctrl-width').value);
-  const height = parseFloat(document.getElementById('ctrl-height').value);
+  const scale = parseFloat(document.getElementById('ctrl-scale').value) / 100;
   const rotation = parseFloat(document.getElementById('ctrl-rotation').value);
+
+  // Use texture's native aspect ratio as base size
+  const tex = libDecal.texture;
+  const img = tex.image || tex.source?.data;
+  const texW = img?.width || 512;
+  const texH = img?.height || 512;
+  const aspect = texW / Math.max(texH, 1);
+  const baseSize = 0.8; // base physical size in meters
+  const width = baseSize * scale;
+  const height = (baseSize / aspect) * scale;
 
   const position = intersect.point.clone();
   const normal = intersect.face.normal.clone();
@@ -449,8 +453,8 @@ function addDecalToScene(intersect, libDecal) {
       libId: libDecal.id,
       mesh: decalMesh,
       texture: libDecal.texture,
-      width,
-      height,
+      scale,
+      aspect,
       rotation,
       targetMesh: intersect.object,
       position: position.clone(),
@@ -458,6 +462,30 @@ function addDecalToScene(intersect, libDecal) {
     };
     state.decalObjects.push(decalObj);
     scene.add(decalMesh);
+
+    // Also place on nearby meshes so decal spans panel gaps
+    const footprintDist = Math.max(width, height) * 0.8;
+    state.carMeshes.forEach(otherMesh => {
+      if (otherMesh === intersect.object) return; // already done
+      // Quick distance check: is this mesh close enough?
+      const otherBox = new THREE.Box3().setFromObject(otherMesh);
+      const decalBox = new THREE.Box3().setFromCenterAndSize(
+        position,
+        new THREE.Vector3(footprintDist, footprintDist, footprintDist)
+      );
+      if (!otherBox.intersectsBox(decalBox)) return;
+      // Create decal on this mesh too
+      try {
+        const extraGeom = new DecalGeometry(otherMesh, position, orientation, size);
+        const extraMesh = new THREE.Mesh(extraGeom, mat.clone());
+        extraMesh.renderOrder = decalMesh.renderOrder;
+        extraMesh.userData.isExtraDecal = true;
+        extraMesh.userData.parentDecalId = id;
+        scene.add(extraMesh);
+        if (!decalObj.extraMeshes) decalObj.extraMeshes = [];
+        decalObj.extraMeshes.push(extraMesh);
+      } catch(e) { /* no overlap on this mesh */ }
+    });
 
     selectDecal(id);
     updateDecalCount();
@@ -487,11 +515,9 @@ function selectDecal(id) {
   }
 
   document.getElementById('decal-controls').classList.remove('disabled');
-  document.getElementById('ctrl-width').value = decal.width;
-  document.getElementById('ctrl-height').value = decal.height;
+  document.getElementById('ctrl-scale').value = Math.round(decal.scale * 100);
   document.getElementById('ctrl-rotation').value = decal.rotation;
-  document.getElementById('val-width').textContent = decal.width.toFixed(2);
-  document.getElementById('val-height').textContent = decal.height.toFixed(2);
+  document.getElementById('val-scale').textContent = Math.round(decal.scale * 100) + '%';
   document.getElementById('val-rotation').textContent = Math.round(decal.rotation) + '°';
 
   renderLayerList();
@@ -514,20 +540,18 @@ function updateSelectedDecalSize() {
   const decal = state.decalObjects.find(d => d.id === state.selectedDecal);
   if (!decal) return;
 
-  const width = parseFloat(document.getElementById('ctrl-width').value);
-  const height = parseFloat(document.getElementById('ctrl-height').value);
-  const rotation = parseFloat(document.getElementById('ctrl-rotation').value);
-
-  decal.width = width;
-  decal.height = height;
-  decal.rotation = rotation;
+  decal.scale = parseFloat(document.getElementById('ctrl-scale').value) / 100;
+  decal.rotation = parseFloat(document.getElementById('ctrl-rotation').value);
 
   rebuildDecalGeometry(decal);
 }
 
 function rebuildDecalGeometry(decal) {
   const orientation = computeDecalOrientation(decal.normal, decal.rotation);
-  const size = new THREE.Vector3(decal.width, decal.height, 1);
+  const baseSize = 0.8;
+  const w = baseSize * decal.scale;
+  const h = (baseSize / decal.aspect) * decal.scale;
+  const size = new THREE.Vector3(w, h, 1);
 
   try {
     const newGeom = new DecalGeometry(decal.targetMesh, decal.position, orientation, size);
@@ -536,6 +560,36 @@ function rebuildDecalGeometry(decal) {
   } catch (e) {
     console.error('Rebuild decal failed:', e);
   }
+
+  // Rebuild extra meshes on nearby panels
+  if (decal.extraMeshes) {
+    decal.extraMeshes.forEach(m => {
+      m.geometry.dispose();
+      scene.remove(m);
+    });
+    decal.extraMeshes = [];
+  }
+  const mat = decal.mesh.material;
+  const footprintDist = Math.max(w, h) * 0.8;
+  state.carMeshes.forEach(otherMesh => {
+    if (otherMesh === decal.targetMesh) return;
+    const otherBox = new THREE.Box3().setFromObject(otherMesh);
+    const decalBox = new THREE.Box3().setFromCenterAndSize(
+      decal.position,
+      new THREE.Vector3(footprintDist, footprintDist, footprintDist)
+    );
+    if (!otherBox.intersectsBox(decalBox)) return;
+    try {
+      const extraGeom = new DecalGeometry(otherMesh, decal.position, orientation, size);
+      const extraMesh = new THREE.Mesh(extraGeom, mat.clone());
+      extraMesh.renderOrder = decal.mesh.renderOrder;
+      extraMesh.userData.isExtraDecal = true;
+      extraMesh.userData.parentDecalId = decal.id;
+      scene.add(extraMesh);
+      if (!decal.extraMeshes) decal.extraMeshes = [];
+      decal.extraMeshes.push(extraMesh);
+    } catch(e) {}
+  });
 }
 
 function moveDecal(decal, newIntersect) {
@@ -560,6 +614,16 @@ function deleteDecal(id) {
   }
   decal.mesh.material.dispose();
   scene.remove(decal.mesh);
+
+  // Remove extra meshes on nearby panels
+  if (decal.extraMeshes) {
+    decal.extraMeshes.forEach(m => {
+      m.geometry.dispose();
+      m.material.dispose();
+      scene.remove(m);
+    });
+  }
+
   state.decalObjects.splice(idx, 1);
 
   if (state.selectedDecal === id) deselectAll();
@@ -858,12 +922,8 @@ document.querySelectorAll('[data-ortho]').forEach(btn => {
   });
 });
 
-document.getElementById('ctrl-width').addEventListener('input', (e) => {
-  document.getElementById('val-width').textContent = parseFloat(e.target.value).toFixed(2);
-  updateSelectedDecalSize();
-});
-document.getElementById('ctrl-height').addEventListener('input', (e) => {
-  document.getElementById('val-height').textContent = parseFloat(e.target.value).toFixed(2);
+document.getElementById('ctrl-scale').addEventListener('input', (e) => {
+  document.getElementById('val-scale').textContent = e.target.value + '%';
   updateSelectedDecalSize();
 });
 document.getElementById('ctrl-rotation').addEventListener('input', (e) => {
@@ -888,9 +948,9 @@ document.getElementById('btn-duplicate-decal').addEventListener('click', () => {
   const fakeIntersect = { point: pos, face: { normal: orig.normal }, object: orig.targetMesh };
   const libDecal = state.decalLibrary.find(d => d.id === orig.libId);
   if (libDecal) {
-    document.getElementById('ctrl-width').value = orig.width;
-    document.getElementById('ctrl-height').value = orig.height;
+    document.getElementById('ctrl-scale').value = Math.round(orig.scale * 100);
     document.getElementById('ctrl-rotation').value = orig.rotation;
+    document.getElementById('val-scale').textContent = Math.round(orig.scale * 100) + '%';
     addDecalToScene(fakeIntersect, libDecal);
     setStatus('ready', '贴花已复制');
   }
