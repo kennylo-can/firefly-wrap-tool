@@ -45,6 +45,8 @@
   #viewport:active { cursor: grabbing; }
   #viewport.place-mode { cursor: crosshair; }
   #viewport.grabbing-decal { cursor: grabbing; }
+  #viewport.view-mode { cursor: grab; }
+  #viewport.view-mode:active { cursor: grabbing; }
   #viewport canvas { display: block; }
 
   /* Decal hover tooltip */
@@ -101,6 +103,50 @@
   .ctrl-row label { font-size: 11px; color: var(--text-dim); min-width: 36px; }
   .ctrl-row input[type=range] { flex: 1; accent-color: var(--accent); height: 4px; }
   .ctrl-row .val { font-size: 10px; color: var(--text-dim); min-width: 28px; text-align: right; }
+
+  /* Mode toggle */
+  #mode-toggle {
+    display: flex; padding: 0 12px 6px; gap: 4px;
+  }
+  #mode-toggle button {
+    flex: 1; padding: 6px; border: 1px solid var(--border); border-radius: 5px;
+    cursor: pointer; font-size: 11px; background: transparent; color: var(--text-dim);
+    transition: all 0.15s;
+  }
+  #mode-toggle button.active {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+  }
+
+  /* Layer list */
+  #layer-list {
+    display: flex; flex-direction: column; gap: 3px;
+    padding: 0 12px 6px; max-height: 180px; overflow-y: auto;
+  }
+  .layer-item {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 6px; border-radius: 4px; background: rgba(255,255,255,0.03);
+    border: 1px solid transparent; cursor: pointer; font-size: 11px;
+    transition: all 0.1s;
+  }
+  .layer-item:hover { border-color: var(--border); }
+  .layer-item.selected { border-color: var(--accent); background: rgba(155,89,182,0.1); }
+  .layer-thumb {
+    width: 28px; height: 28px; border-radius: 3px;
+    background: repeating-conic-gradient(#2a2a2a 0% 25%, #222 0% 50%) 50% / 8px 8px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    flex-shrink: 0;
+  }
+  .layer-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .layer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+  .layer-btns { display: flex; gap: 2px; flex-shrink: 0; }
+  .layer-btns button {
+    width: 18px; height: 18px; border: none; border-radius: 3px;
+    cursor: pointer; font-size: 10px; background: transparent; color: var(--text-dim);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .layer-btns button:hover { background: rgba(255,255,255,0.1); color: #fff; }
+  .layer-hidden { opacity: 0.35; }
+  .layer-hidden .layer-name { text-decoration: line-through; }
 
   /* Status bar */
   #statusbar {
@@ -167,6 +213,17 @@
     <h3>📦 贴花库</h3>
     <div id="decal-library">
       <span id="import-hint">点击 ＋ 导入 PNG 贴花</span>
+    </div>
+
+    <h3>👁 模式</h3>
+    <div id="mode-toggle">
+      <button data-mode="view" class="active">🔍 查看</button>
+      <button data-mode="edit">✏️ 编辑</button>
+    </div>
+
+    <h3>📑 图层 <span style="font-size:10px;color:var(--text-dim);font-weight:400" id="layer-count">0</span></h3>
+    <div id="layer-list">
+      <span style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px">放置贴花后出现</span>
     </div>
 
     <h3>🎛 选中贴花</h3>
@@ -283,6 +340,7 @@ const state = {
   carBounds: null,
   isDragging: false,
   dragOffset: new THREE.Vector2(),
+  viewMode: 'view', // 'view' = orbit only, 'edit' = manipulate decals
 };
 
 // ============ THREE.JS SETUP ============
@@ -403,7 +461,7 @@ function addDecalToScene(intersect, libDecal) {
     });
 
     const decalMesh = new THREE.Mesh(geom, mat);
-    decalMesh.renderOrder = 1;
+    decalMesh.renderOrder = state.decalObjects.length + 1; // top layer
 
     const id = 'decal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
     const decalObj = {
@@ -462,6 +520,8 @@ function selectDecal(id) {
     decal.mesh.material.emissive.setHex(0x9b59b6);
     decal.mesh.material.emissiveIntensity = 0.3;
   }
+
+  renderLayerList();
 }
 
 function deselectAll() {
@@ -474,6 +534,7 @@ function deselectAll() {
   }
   state.selectedDecal = null;
   document.getElementById('decal-controls').classList.add('disabled');
+  renderLayerList();
 }
 
 function updateSelectedDecalSize() {
@@ -530,6 +591,7 @@ function deleteDecal(id) {
   state.decalObjects.splice(idx, 1);
 
   if (state.selectedDecal === id) deselectAll();
+  else renderLayerList();
   updateDecalCount();
 }
 
@@ -641,9 +703,12 @@ function importImages(files) {
 const tooltip = document.getElementById('tooltip');
 
 function onViewportMouseDown(event) {
-  if (event.button !== 0) return; // left click only
+  if (event.button !== 0) return;
 
-  // First check if we hit a placed decal
+  // View mode: always orbit, never touch decals
+  if (state.viewMode === 'view') return;
+
+  // Edit mode: decal interaction
   const decalHits = getDecalIntersect(event);
 
   if (decalHits.length > 0) {
@@ -679,6 +744,13 @@ function onViewportMouseDown(event) {
 }
 
 function onViewportMouseMove(event) {
+  // View mode: no decal interaction, just orbit
+  if (state.viewMode === 'view') {
+    tooltip.style.display = 'none';
+    viewport.style.cursor = '';
+    return;
+  }
+
   if (state.isDragging && state.selectedDecal) {
     const decal = state.decalObjects.find(d => d.id === state.selectedDecal);
     if (!decal) return;
@@ -897,6 +969,145 @@ document.getElementById('img-input').addEventListener('change', (e) => {
   e.target.value = '';
 });
 
+// ============ VIEW/EDIT MODE TOGGLE ============
+function setViewMode(mode) {
+  state.viewMode = mode;
+  document.querySelectorAll('#mode-toggle button').forEach(b => b.classList.remove('active'));
+  const btn = document.querySelector(`[data-mode="${mode}"]`);
+  if (btn) btn.classList.add('active');
+
+  if (mode === 'view') {
+    viewport.classList.add('view-mode');
+    viewport.classList.remove('place-mode');
+    controls.enabled = true;
+    deselectAll();
+    state.activeLibId = null;
+    renderLibrary();
+    tooltip.style.display = 'none';
+    setStatus('ready', '查看模式 · 拖拽旋转视角');
+  } else {
+    viewport.classList.remove('view-mode');
+    controls.enabled = true;
+    setStatus('ready', '编辑模式 · 点击车身放置贴花');
+  }
+}
+
+document.querySelectorAll('#mode-toggle button').forEach(btn => {
+  btn.addEventListener('click', () => setViewMode(btn.dataset.mode));
+});
+
+// ============ LAYER SYSTEM ============
+function renderLayerList() {
+  const container = document.getElementById('layer-list');
+  const countEl = document.getElementById('layer-count');
+
+  container.innerHTML = '';
+
+  if (state.decalObjects.length === 0) {
+    container.innerHTML = '<span style="font-size:10px;color:var(--text-dim);text-align:center;padding:8px;display:block">放置贴花后出现</span>';
+    countEl.textContent = '0';
+    return;
+  }
+
+  countEl.textContent = state.decalObjects.length;
+
+  // Sort by renderOrder descending (top layer first)
+  const sorted = [...state.decalObjects].sort((a, b) => b.mesh.renderOrder - a.mesh.renderOrder);
+
+  sorted.forEach((decal, idx) => {
+    const lib = state.decalLibrary.find(d => d.id === decal.libId);
+    const name = lib ? lib.name : '贴花';
+    const totalLayers = state.decalObjects.length;
+
+    const item = document.createElement('div');
+    item.className = 'layer-item';
+    if (state.selectedDecal === decal.id) item.classList.add('selected');
+    if (!decal.mesh.visible) item.classList.add('layer-hidden');
+
+    const thumb = document.createElement('div');
+    thumb.className = 'layer-thumb';
+    if (lib?.texture?.image) {
+      const img = document.createElement('img');
+      img.src = toDataURL(lib.texture);
+      thumb.appendChild(img);
+    }
+    item.appendChild(thumb);
+
+    const nameEl = document.createElement('span');
+    nameEl.className = 'layer-name';
+    nameEl.textContent = name;
+    item.appendChild(nameEl);
+
+    const btns = document.createElement('div');
+    btns.className = 'layer-btns';
+
+    // Visibility toggle
+    const visBtn = document.createElement('button');
+    visBtn.textContent = decal.mesh.visible ? '👁' : '🚫';
+    visBtn.title = '显示/隐藏';
+    visBtn.onclick = (e) => {
+      e.stopPropagation();
+      decal.mesh.visible = !decal.mesh.visible;
+      renderLayerList();
+    };
+    btns.appendChild(visBtn);
+
+    // Move up (higher renderOrder = more visible)
+    const upBtn = document.createElement('button');
+    upBtn.textContent = '↑';
+    upBtn.title = '上移一层';
+    upBtn.style.opacity = idx === 0 ? '0.3' : '1';
+    upBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (idx === 0) return; // already top
+      moveLayer(decal.id, 1);
+    };
+    btns.appendChild(upBtn);
+
+    // Move down
+    const dnBtn = document.createElement('button');
+    dnBtn.textContent = '↓';
+    dnBtn.title = '下移一层';
+    dnBtn.style.opacity = idx === totalLayers - 1 ? '0.3' : '1';
+    dnBtn.onclick = (e) => {
+      e.stopPropagation();
+      if (idx === totalLayers - 1) return;
+      moveLayer(decal.id, -1);
+    };
+    btns.appendChild(dnBtn);
+
+    item.appendChild(btns);
+
+    // Click layer to select decal
+    item.onclick = () => {
+      if (state.viewMode === 'view') {
+        setViewMode('edit'); // Auto-switch to edit
+      }
+      selectDecal(decal.id);
+      renderLayerList();
+    };
+
+    container.appendChild(item);
+  });
+}
+
+function moveLayer(decalId, direction) {
+  // Sort current decals by renderOrder
+  const sorted = [...state.decalObjects].sort((a, b) => b.mesh.renderOrder - a.mesh.renderOrder);
+  const idx = sorted.findIndex(d => d.id === decalId);
+  if (idx === -1) return;
+
+  const targetIdx = idx - direction; // direction: 1=up, -1=down
+  if (targetIdx < 0 || targetIdx >= sorted.length) return;
+
+  // Swap renderOrders
+  const tmp = sorted[idx].mesh.renderOrder;
+  sorted[idx].mesh.renderOrder = sorted[targetIdx].mesh.renderOrder;
+  sorted[targetIdx].mesh.renderOrder = tmp;
+
+  renderLayerList();
+}
+
 // ============ EXPORT ============
 const exportModal = document.getElementById('export-modal');
 
@@ -1087,6 +1298,7 @@ document.addEventListener('keydown', e => {
 // ============ INIT ============
 resize();
 window.addEventListener('resize', resize);
+setViewMode('view'); // Start in view mode
 animate();
 setStatus('warn', '请加载 GLB 模型');
 
