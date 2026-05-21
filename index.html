@@ -353,15 +353,26 @@ controls.maxDistance = 15;
 controls.maxPolarAngle = Math.PI * 0.8;
 controls.update();
 
-// Flat lighting — ambient only, no directional shadows
-const ambientLight = new THREE.AmbientLight('#ffffff', 2.5);
-scene.add(ambientLight);
-// No directional lights — all faces evenly lit
+// Lighting — balanced from all six directions
+scene.add(new THREE.AmbientLight('#ffffff', 1.0));
 
-// Ground plane
+function addLight(color, intensity, x, y, z) {
+  const l = new THREE.DirectionalLight(color, intensity);
+  l.position.set(x, y, z);
+  scene.add(l);
+  return l;
+}
+addLight('#ffffff', 2.0,  0, 5,  4);  // front
+addLight('#ffffff', 2.0,  0, 5, -4);  // back
+addLight('#ffffff', 2.0,  4, 5,  0);  // right
+addLight('#ffffff', 2.0, -4, 5,  0);  // left
+addLight('#ffffff', 1.5,  0, 8,  0);  // top
+addLight('#ffffff', 0.5,  0,-2,  0);  // bottom
+
+// Ground (simple plane, no shadows)
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(20, 20),
-  new THREE.MeshBasicMaterial({ color: '#2a2a2f', transparent: true, opacity: 0.3 })
+  new THREE.MeshBasicMaterial({ color: '#2a2a2f' })
 );
 ground.rotation.x = -Math.PI / 2;
 scene.add(ground);
@@ -814,45 +825,36 @@ renderer.domElement.addEventListener('touchmove', (e) => {
 });
 renderer.domElement.addEventListener('touchend', onViewportMouseUp);
 
-// ============ ORTHO VIEW BUTTONS ============
+// ============ VIEW PRESETS (Blender-style snap) ============
 document.querySelectorAll('[data-ortho]').forEach(btn => {
   btn.addEventListener('click', () => {
     if (!state.carBounds) return;
     const c = state.carBounds.center;
     const s = state.carBounds.size;
-    const dist = Math.max(s.x, s.y, s.z) * 2;
+    const dist = Math.max(s.x, s.y, s.z) * 1.6;  // closer = car fills more frame
+    const eyeY = c.y + s.y * 0.15;                // slightly above center
 
     const views = {
-      front: { pos: [c.x, c.y, c.z - dist], target: [c.x, c.y, c.z] },
-      rear:  { pos: [c.x, c.y, c.z + dist], target: [c.x, c.y, c.z] },
-      left:  { pos: [c.x - dist, c.y, c.z], target: [c.x, c.y, c.z] },
-      right: { pos: [c.x + dist, c.y, c.z], target: [c.x, c.y, c.z] },
-      top:   { pos: [c.x, c.y + dist, c.z], target: [c.x, c.y, c.z] },
-      persp: { pos: [c.x + dist*0.7, c.y + dist*0.4, c.z + dist*0.7], target: [c.x, c.y, c.z] },
+      front: { pos: [c.x, eyeY, c.z + dist], target: [c.x, c.y, c.z], up: [0, 1, 0] },
+      rear:  { pos: [c.x, eyeY, c.z - dist], target: [c.x, c.y, c.z], up: [0, 1, 0] },
+      left:  { pos: [c.x + dist, eyeY, c.z], target: [c.x, c.y, c.z], up: [0, 1, 0] },
+      right: { pos: [c.x - dist, eyeY, c.z], target: [c.x, c.y, c.z], up: [0, 1, 0] },
+      top:   { pos: [c.x, c.y + dist, c.z + 0.01], target: [c.x, c.y, c.z], up: [0, 0, -1] },
+      persp: { pos: [c.x + dist*0.7, eyeY*1.2, c.z - dist*0.7], target: [c.x, c.y, c.z], up: [0, 1, 0] },
     };
 
-    const view = views[btn.dataset.ortho];
-    if (!view) return;
+    const v = views[btn.dataset.ortho];
+    if (!v) return;
 
-    // Smooth animate camera
-    const startPos = camera.position.clone();
-    const startTarget = controls.target.clone();
-    const endPos = new THREE.Vector3(...view.pos);
-    const endTarget = new THREE.Vector3(...view.target);
-    const startTime = performance.now();
-    const duration = 500;
+    // Set position, lookAt, and update controls so mouse works immediately
+    camera.position.set(...v.pos);
+    camera.up.set(...v.up);
+    camera.lookAt(...v.target);
+    controls.target.set(...v.target);
+    controls.update();
+    renderer.render(scene, camera); // force immediate update
 
-    function animStep() {
-      const elapsed = performance.now() - startTime;
-      const t = Math.min(elapsed / duration, 1.0);
-      // Ease in-out
-      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
-      camera.position.lerpVectors(startPos, endPos, ease);
-      controls.target.lerpVectors(startTarget, endTarget, ease);
-      controls.update();
-      if (t < 1) requestAnimationFrame(animStep);
-    }
-    animStep();
+    setStatus('ready', `视角: ${btn.dataset.ortho}`);
   });
 });
 
@@ -1062,10 +1064,10 @@ function exportView(viewName) {
   const viewCam = new THREE.OrthographicCamera(-maxDim/2, maxDim/2, maxDim/2, -maxDim/2, 0.1, 100);
 
   const views = {
-    left:  { pos: [-maxDim*2, center.y, 0], look: [0, center.y, 0], up: [0, 1, 0] },
-    right: { pos: [maxDim*2, center.y, 0],  look: [0, center.y, 0], up: [0, 1, 0] },
-    front: { pos: [0, center.y, -maxDim*2], look: [0, center.y, 0], up: [0, 1, 0] },
-    rear:  { pos: [0, center.y, maxDim*2],  look: [0, center.y, 0], up: [0, 1, 0] },
+    left:  { pos: [maxDim*2, center.y, 0], look: [0, center.y, 0], up: [0, 1, 0] },
+    right: { pos: [-maxDim*2, center.y, 0],  look: [0, center.y, 0], up: [0, 1, 0] },
+    front: { pos: [0, center.y, maxDim*2], look: [0, center.y, 0], up: [0, 1, 0] },
+    rear:  { pos: [0, center.y, -maxDim*2],  look: [0, center.y, 0], up: [0, 1, 0] },
     top:   { pos: [0, maxDim*2, 0],         look: [0, 0, 0],      up: [0, 0, -1] },
   };
 
@@ -1139,7 +1141,18 @@ function loadModel(file) {
 
     state.carMeshes = [];
     state.model.traverse(c => {
-      if (c.isMesh) { state.carMeshes.push(c); }
+      if (c.isMesh) {
+        state.carMeshes.push(c);
+        // Flatten shading: high roughness + zero metalness = diffuse, even look
+        const mats = Array.isArray(c.material) ? c.material : [c.material];
+        mats.forEach(m => {
+          if (m.isMaterial && m.roughness !== undefined) {
+            m.roughness = 0.95;
+            m.metalness = 0;
+            m.needsUpdate = true;
+          }
+        });
+      }
     });
 
     computeBounds();
@@ -1236,6 +1249,12 @@ function animate() {
   controls.update();
   renderer.render(scene, camera);
 }
+
+// Switch to perspective when user starts orbiting after using a view preset
+let lastViewPreset = false;
+renderer.domElement.addEventListener('pointerdown', () => {
+  lastViewPreset = false;
+});
 </script>
 </body>
 </html>
