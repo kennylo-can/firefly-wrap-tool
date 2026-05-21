@@ -1,0 +1,1100 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Firefly Decal Designer</title>
+<style>
+  :root {
+    --bg: #1a1a1f;
+    --panel: #232329;
+    --border: #333;
+    --text: #ddd;
+    --text-dim: #888;
+    --accent: #9b59b6;
+    --accent2: #e67e22;
+    --danger: #c0392b;
+    --success: #27ae60;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    height: 100vh; overflow: hidden; user-select: none;
+  }
+  #app { display: grid; grid-template-columns: 1fr 300px; grid-template-rows: 44px 1fr 36px; height: 100vh; }
+  #toolbar {
+    grid-column: 1/-1; background: var(--panel); border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 14px; gap: 10px;
+  }
+  #toolbar .title { font-size: 15px; font-weight: 600; }
+  #toolbar .title span { color: var(--accent); }
+  #toolbar .hint { font-size: 11px; color: var(--text-dim); margin-left: auto; }
+  .btn {
+    padding: 6px 12px; border: 1px solid var(--border); border-radius: 5px;
+    cursor: pointer; font-size: 12px; background: transparent; color: var(--text);
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .btn:hover { border-color: var(--accent); }
+  .btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { border-color: var(--danger); color: var(--danger); }
+  .btn.small { padding: 3px 8px; font-size: 10px; }
+
+  /* Viewport */
+  #viewport { position: relative; cursor: grab; overflow: hidden; }
+  #viewport:active { cursor: grabbing; }
+  #viewport.place-mode { cursor: crosshair; }
+  #viewport.grabbing-decal { cursor: grabbing; }
+  #viewport canvas { display: block; }
+
+  /* Decal hover tooltip */
+  #tooltip {
+    position: absolute; pointer-events: none; z-index: 20;
+    background: rgba(0,0,0,0.75); color: #fff; padding: 2px 8px;
+    border-radius: 4px; font-size: 11px; display: none;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    grid-column: 2; grid-row: 2 / 4;
+    background: var(--panel); border-left: 1px solid var(--border);
+    display: flex; flex-direction: column; overflow-y: auto;
+  }
+  #sidebar h3 {
+    font-size: 11px; text-transform: uppercase; color: var(--text-dim);
+    padding: 10px 12px 6px; font-weight: 500; letter-spacing: 0.5px;
+  }
+
+  /* Decal Library */
+  #decal-library {
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px;
+    min-height: 60px; align-content: flex-start;
+  }
+  .decal-thumb {
+    width: 56px; height: 56px; border: 2px solid var(--border); border-radius: 6px;
+    cursor: pointer; background: repeating-conic-gradient(#2a2a2a 0% 25%, #222 0% 50%) 50% / 12px 12px;
+    display: flex; align-items: center; justify-content: center; overflow: hidden;
+    transition: border-color 0.15s; position: relative;
+  }
+  .decal-thumb:hover { border-color: var(--text-dim); }
+  .decal-thumb.active { border-color: var(--accent); box-shadow: 0 0 8px rgba(155, 89, 182, 0.4); }
+  .decal-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; }
+  .decal-thumb .del-btn {
+    position: absolute; top: -6px; right: -6px;
+    width: 16px; height: 16px; border-radius: 50%;
+    background: var(--danger); color: #fff; border: none;
+    font-size: 10px; cursor: pointer; display: none;
+    align-items: center; justify-content: center; line-height: 1;
+  }
+  .decal-thumb:hover .del-btn { display: flex; }
+  #import-hint {
+    color: var(--text-dim); font-size: 11px; text-align: center;
+    padding: 16px 12px; width: 100%;
+  }
+
+  /* Controls */
+  #decal-controls {
+    padding: 0 12px 10px; display: flex; flex-direction: column; gap: 8px;
+  }
+  #decal-controls.disabled { opacity: 0.4; pointer-events: none; }
+  .ctrl-row { display: flex; gap: 6px; align-items: center; }
+  .ctrl-row label { font-size: 11px; color: var(--text-dim); min-width: 36px; }
+  .ctrl-row input[type=range] { flex: 1; accent-color: var(--accent); height: 4px; }
+  .ctrl-row .val { font-size: 10px; color: var(--text-dim); min-width: 28px; text-align: right; }
+
+  /* Status bar */
+  #statusbar {
+    grid-column: 1; grid-row: 3;
+    background: var(--panel); border-top: 1px solid var(--border);
+    display: flex; align-items: center; padding: 0 14px;
+    font-size: 11px; color: var(--text-dim); gap: 10px;
+  }
+  #statusbar .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); }
+  #statusbar .dot.warn { background: var(--accent2); }
+  #decal-count { color: var(--text); }
+
+  /* File input */
+  #file-input, #img-input { display: none; }
+
+  /* Drop overlay */
+  #drop-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.85);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100; flex-direction: column; gap: 10px;
+  }
+  #drop-overlay h2 { font-size: 18px; font-weight: 400; }
+  #drop-overlay p { color: var(--text-dim); font-size: 12px; }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 50px; left: 50%; transform: translateX(-50%);
+    background: #333; color: #fff; padding: 8px 18px; border-radius: 6px;
+    font-size: 12px; z-index: 200; opacity: 0; transition: opacity 0.2s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+
+  /* Export dialog */
+  #export-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.7);
+    display: none; align-items: center; justify-content: center; z-index: 150;
+  }
+  #export-modal.show { display: flex; }
+  #export-dialog {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 20px; min-width: 280px; display: flex; flex-direction: column; gap: 8px;
+  }
+  #export-dialog h3 { font-size: 14px; margin-bottom: 4px; }
+  #export-dialog .export-views { display: flex; flex-wrap: wrap; gap: 6px; }
+  #export-dialog .export-btn {
+    flex: 1; min-width: 70px; text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div id="toolbar">
+    <span class="title">✨ <span>Firefly</span> Decal Designer</span>
+    <button class="btn small" id="btn-load-model">📂 加载GLB</button>
+    <button class="btn small accent" id="btn-import-decal">＋ 导入贴花</button>
+    <button class="btn small" id="btn-export">📥 导出视图</button>
+    <span class="hint" id="model-name">未加载模型</span>
+  </div>
+
+  <div id="viewport"></div>
+
+  <div id="sidebar">
+    <h3>📦 贴花库</h3>
+    <div id="decal-library">
+      <span id="import-hint">点击 ＋ 导入 PNG 贴花</span>
+    </div>
+
+    <h3>🎛 选中贴花</h3>
+    <div id="decal-controls" class="disabled">
+      <div class="ctrl-row">
+        <label>宽度</label>
+        <input type="range" id="ctrl-width" min="0.05" max="5" step="0.01" value="0.6">
+        <span class="val" id="val-width">0.60</span>
+      </div>
+      <div class="ctrl-row">
+        <label>高度</label>
+        <input type="range" id="ctrl-height" min="0.05" max="5" step="0.01" value="0.4">
+        <span class="val" id="val-height">0.40</span>
+      </div>
+      <div class="ctrl-row">
+        <label>旋转</label>
+        <input type="range" id="ctrl-rotation" min="-180" max="180" step="1" value="0">
+        <span class="val" id="val-rotation">0°</span>
+      </div>
+      <div class="ctrl-row" style="margin-top:4px">
+        <button class="btn small danger" id="btn-delete-decal">🗑 删除</button>
+        <button class="btn small" id="btn-duplicate-decal">📋 复制</button>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:0"></div>
+    <h3>🎨 车身颜色</h3>
+    <div style="padding: 0 12px 6px">
+      <div class="ctrl-row">
+        <input type="color" id="car-color" value="#c8d0d8" style="width:100%;height:32px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:none;padding:2px">
+        <button class="btn small" id="btn-reset-color" style="flex-shrink:0">重置</button>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);margin-top:4px"></div>
+    <h3>💡 灯光</h3>
+    <div style="padding: 0 12px 6px;display:flex;flex-direction:column;gap:6px">
+      <div class="ctrl-row">
+        <label>环境光</label>
+        <input type="range" id="light-ambient" min="0" max="200" value="50">
+        <span class="val" id="val-ambient">50</span>
+      </div>
+      <div class="ctrl-row">
+        <label>主光强</label>
+        <input type="range" id="light-main" min="0" max="500" value="350">
+        <span class="val" id="val-main">350</span>
+      </div>
+      <div style="display:flex;gap:4px">
+        <button class="btn small" data-light-preset="studio">📸 摄影棚</button>
+        <button class="btn small" data-light-preset="top">☀️ 顶光</button>
+        <button class="btn small" data-light-preset="all">💡 全亮</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="statusbar">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-text">就绪</span>
+    <span style="margin-left:auto">贴花数: <span id="decal-count">0</span></span>
+  </div>
+</div>
+
+<div id="drop-overlay">
+  <h2>📍 拖入 Firefly GLB 模型</h2>
+  <p>或点击下方按钮选择文件</p>
+  <button class="btn accent" id="btn-pick-file">选择 .glb 文件</button>
+</div>
+
+<input type="file" id="file-input" accept=".glb,.gltf">
+<input type="file" id="img-input" accept="image/png,image/jpeg,image/webp" multiple>
+
+<div id="tooltip"></div>
+<div id="toast"></div>
+<div id="export-modal">
+  <div id="export-dialog">
+    <h3>📥 导出正交视图</h3>
+    <p style="font-size:11px;color:var(--text-dim)">选择需要导出的视角（2048×2048 PNG）</p>
+    <div class="export-views">
+      <button class="btn export-btn" data-export="front">▲ 前侧</button>
+      <button class="btn export-btn" data-export="rear">▼ 后侧</button>
+      <button class="btn export-btn" data-export="left">◀ 左侧</button>
+      <button class="btn export-btn" data-export="right">▶ 右侧</button>
+      <button class="btn export-btn" data-export="top">⬆ 顶部</button>
+    </div>
+    <button class="btn accent" data-export="all" style="margin-top:4px">📦 导出全部五张</button>
+    <button class="btn" id="btn-close-export" style="margin-top:4px">取消</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
+import { DecalGeometry } from 'three/addons/geometries/DecalGeometry.js';
+
+// ============ STATE ============
+const state = {
+  model: null,
+  carMeshes: [],       // all meshes from GLB (for raycasting)
+  decalLibrary: [],    // { id, name, texture, element }
+  decalObjects: [],    // { id, libId, mesh, texture, width, height, rotation }
+  selectedDecal: null, // id of selected placed decal
+  activeLibId: null,   // which library decal is selected for placement
+  carBounds: null,
+  isDragging: false,
+  dragOffset: new THREE.Vector2(),
+};
+
+// ============ THREE.JS SETUP ============
+const viewport = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+viewport.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#1a1a1f');
+
+const camera = new THREE.PerspectiveCamera(45, 2, 0.1, 100);
+camera.position.set(4, 1.5, 5);
+camera.lookAt(0, 0.5, 0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.5, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 0.8;
+controls.maxDistance = 15;
+controls.maxPolarAngle = Math.PI * 0.8;
+controls.update();
+
+// Lighting
+const ambientLight = new THREE.AmbientLight('#ffffff', 0.5);
+scene.add(ambientLight);
+const sun = new THREE.DirectionalLight('#ffffff', 3.5);
+sun.position.set(5, 8, 3);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 50;
+sun.shadow.camera.left = -10;
+sun.shadow.camera.right = 10;
+sun.shadow.camera.top = 10;
+sun.shadow.camera.bottom = -10;
+sun.shadow.bias = -0.0001;
+scene.add(sun);
+const fillLight = new THREE.DirectionalLight('#8899cc', 1.0);
+fillLight.position.set(-2, 1, -1);
+scene.add(fillLight);
+
+// Ground
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(20, 20),
+  new THREE.ShadowMaterial({ opacity: 0.35 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+scene.add(new THREE.GridHelper(10, 20, '#444', '#2a2a2a').translateY(0.001));
+
+// ============ RAYCASTERS ============
+const carRaycaster = new THREE.Raycaster();
+const decalRaycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+
+function getIntersect(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  carRaycaster.setFromCamera(mouse, camera);
+  return carRaycaster.intersectObjects(state.carMeshes, false);
+}
+
+function getDecalIntersect(event) {
+  const rect = renderer.domElement.getBoundingClientRect();
+  mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+  mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  decalRaycaster.setFromCamera(mouse, camera);
+  const decalMeshes = state.decalObjects.map(d => d.mesh);
+  return decalRaycaster.intersectObjects(decalMeshes, false);
+}
+
+// ============ DECAL PLACEMENT ============
+function computeDecalOrientation(normal, rotationDeg) {
+  // Create orientation where decal's local Z points along surface normal,
+  // then rotate around that axis by user-specified rotation
+  const target = new THREE.Vector3(0, 0, 1);
+  const q = new THREE.Quaternion().setFromUnitVectors(target, normal.clone().normalize());
+  const euler = new THREE.Euler().setFromQuaternion(q);
+  euler.z += THREE.MathUtils.degToRad(rotationDeg);
+  return euler;
+}
+
+function addDecalToScene(intersect, libDecal) {
+  const width = parseFloat(document.getElementById('ctrl-width').value);
+  const height = parseFloat(document.getElementById('ctrl-height').value);
+  const rotation = parseFloat(document.getElementById('ctrl-rotation').value);
+
+  const position = intersect.point.clone();
+  const normal = intersect.face.normal.clone();
+  normal.transformDirection(intersect.object.matrixWorld);
+
+  const orientation = computeDecalOrientation(normal, rotation);
+  const size = new THREE.Vector3(width, height, 1);
+
+  try {
+    const geom = new DecalGeometry(intersect.object, position, orientation, size);
+
+    const mat = new THREE.MeshStandardMaterial({
+      map: libDecal.texture,
+      transparent: true,
+      alphaTest: 0.05,
+      depthTest: true,
+      depthWrite: false,
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -1,
+      side: THREE.DoubleSide,
+    });
+
+    const decalMesh = new THREE.Mesh(geom, mat);
+    decalMesh.renderOrder = 1;
+
+    const id = 'decal_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    const decalObj = {
+      id,
+      libId: libDecal.id,
+      mesh: decalMesh,
+      texture: libDecal.texture,
+      width,
+      height,
+      rotation,
+      targetMesh: intersect.object,
+      position: position.clone(),
+      normal: normal.clone(),
+    };
+    state.decalObjects.push(decalObj);
+    scene.add(decalMesh);
+
+    selectDecal(id);
+    updateDecalCount();
+    return decalObj;
+  } catch (e) {
+    console.error('DecalGeometry failed:', e);
+    toast('贴花放置失败，请换一个位置试试');
+    return null;
+  }
+}
+
+// ============ DECAL SELECTION & MANIPULATION ============
+function selectDecal(id) {
+  // Deselect previous
+  if (state.selectedDecal) {
+    const prev = state.decalObjects.find(d => d.id === state.selectedDecal);
+    if (prev) {
+      prev.mesh.material.emissive?.setHex(0x000000);
+      prev.mesh.material.emissiveIntensity = 0;
+    }
+  }
+
+  state.selectedDecal = id;
+  const decal = state.decalObjects.find(d => d.id === id);
+  if (!decal) {
+    document.getElementById('decal-controls').classList.add('disabled');
+    return;
+  }
+
+  document.getElementById('decal-controls').classList.remove('disabled');
+  document.getElementById('ctrl-width').value = decal.width;
+  document.getElementById('ctrl-height').value = decal.height;
+  document.getElementById('ctrl-rotation').value = decal.rotation;
+  document.getElementById('val-width').textContent = decal.width.toFixed(2);
+  document.getElementById('val-height').textContent = decal.height.toFixed(2);
+  document.getElementById('val-rotation').textContent = Math.round(decal.rotation) + '°';
+
+  // Highlight
+  if (decal.mesh.material.emissive) {
+    decal.mesh.material.emissive.setHex(0x9b59b6);
+    decal.mesh.material.emissiveIntensity = 0.3;
+  }
+}
+
+function deselectAll() {
+  if (state.selectedDecal) {
+    const prev = state.decalObjects.find(d => d.id === state.selectedDecal);
+    if (prev && prev.mesh.material.emissive) {
+      prev.mesh.material.emissive.setHex(0x000000);
+      prev.mesh.material.emissiveIntensity = 0;
+    }
+  }
+  state.selectedDecal = null;
+  document.getElementById('decal-controls').classList.add('disabled');
+}
+
+function updateSelectedDecalSize() {
+  if (!state.selectedDecal) return;
+  const decal = state.decalObjects.find(d => d.id === state.selectedDecal);
+  if (!decal) return;
+
+  const width = parseFloat(document.getElementById('ctrl-width').value);
+  const height = parseFloat(document.getElementById('ctrl-height').value);
+  const rotation = parseFloat(document.getElementById('ctrl-rotation').value);
+
+  decal.width = width;
+  decal.height = height;
+  decal.rotation = rotation;
+
+  rebuildDecalGeometry(decal);
+}
+
+function rebuildDecalGeometry(decal) {
+  const orientation = computeDecalOrientation(decal.normal, decal.rotation);
+  const size = new THREE.Vector3(decal.width, decal.height, 1);
+
+  try {
+    const newGeom = new DecalGeometry(decal.targetMesh, decal.position, orientation, size);
+    decal.mesh.geometry.dispose();
+    decal.mesh.geometry = newGeom;
+  } catch (e) {
+    console.error('Rebuild decal failed:', e);
+  }
+}
+
+function moveDecal(decal, newIntersect) {
+  const position = newIntersect.point.clone();
+  const normal = newIntersect.face.normal.clone();
+  normal.transformDirection(newIntersect.object.matrixWorld);
+
+  decal.position.copy(position);
+  decal.normal.copy(normal);
+  decal.targetMesh = newIntersect.object;
+
+  rebuildDecalGeometry(decal);
+}
+
+function deleteDecal(id) {
+  const idx = state.decalObjects.findIndex(d => d.id === id);
+  if (idx === -1) return;
+  const decal = state.decalObjects[idx];
+  decal.mesh.geometry.dispose();
+  if (decal.mesh.material.map !== decal.texture) {
+    decal.mesh.material.map?.dispose?.();
+  }
+  decal.mesh.material.dispose();
+  scene.remove(decal.mesh);
+  state.decalObjects.splice(idx, 1);
+
+  if (state.selectedDecal === id) deselectAll();
+  updateDecalCount();
+}
+
+// ============ DECAL LIBRARY ============
+let libIdCounter = 0;
+function addToLibrary(name, texture) {
+  const id = 'lib_' + (++libIdCounter);
+  const libDecal = { id, name, texture, element: null };
+  state.decalLibrary.push(libDecal);
+  renderLibrary();
+  return libDecal;
+}
+
+function renderLibrary() {
+  const container = document.getElementById('decal-library');
+  const hint = document.getElementById('import-hint');
+
+  if (state.decalLibrary.length === 0) {
+    hint.style.display = 'block';
+    // Clear old thumbs but keep hint
+    container.querySelectorAll('.decal-thumb').forEach(el => el.remove());
+    return;
+  }
+  hint.style.display = 'none';
+
+  container.querySelectorAll('.decal-thumb').forEach(el => el.remove());
+
+  state.decalLibrary.forEach(lib => {
+    const thumb = document.createElement('div');
+    thumb.className = 'decal-thumb';
+    if (state.activeLibId === lib.id) thumb.classList.add('active');
+
+    const img = document.createElement('img');
+    img.src = lib.texture.image ? toDataURL(lib.texture) : '';
+    thumb.appendChild(img);
+
+    const delBtn = document.createElement('span');
+    delBtn.className = 'del-btn';
+    delBtn.textContent = '×';
+    delBtn.onclick = (e) => { e.stopPropagation(); removeFromLibrary(lib.id); };
+
+    thumb.appendChild(delBtn);
+    thumb.onclick = () => selectLibraryDecal(lib.id);
+
+    container.appendChild(thumb);
+    lib.element = thumb;
+  });
+}
+
+function toDataURL(texture) {
+  if (!texture.image) return '';
+  const canvas = document.createElement('canvas');
+  canvas.width = texture.image.width;
+  canvas.height = texture.image.height;
+  canvas.getContext('2d').drawImage(texture.image, 0, 0);
+  return canvas.toDataURL();
+}
+
+function selectLibraryDecal(id) {
+  state.activeLibId = id;
+  document.querySelectorAll('.decal-thumb').forEach(el => el.classList.remove('active'));
+  const lib = state.decalLibrary.find(d => d.id === id);
+  if (lib?.element) lib.element.classList.add('active');
+  deselectAll();
+  viewport.classList.add('place-mode');
+  setStatus('ready', '点击车身放置贴花');
+}
+
+function removeFromLibrary(id) {
+  const idx = state.decalLibrary.findIndex(d => d.id === id);
+  if (idx === -1) return;
+  const lib = state.decalLibrary[idx];
+
+  // Remove all placed decals using this library item
+  const toRemove = state.decalObjects.filter(d => d.libId === id);
+  toRemove.forEach(d => deleteDecal(d.id));
+
+  lib.texture.dispose();
+  state.decalLibrary.splice(idx, 1);
+  if (state.activeLibId === id) {
+    state.activeLibId = null;
+    viewport.classList.remove('place-mode');
+  }
+  renderLibrary();
+}
+
+function importImages(files) {
+  Array.from(files).forEach(file => {
+    if (!file.type.startsWith('image/')) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const tex = new THREE.Texture(img);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.wrapS = THREE.ClampToEdgeWrapping;
+        tex.wrapT = THREE.ClampToEdgeWrapping;
+        tex.needsUpdate = true;
+        addToLibrary(file.name.replace(/\.[^.]+$/, ''), tex);
+        setStatus('ready', `已导入: ${file.name}`);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ============ VIEWPORT EVENTS ============
+const tooltip = document.getElementById('tooltip');
+
+function onViewportMouseDown(event) {
+  if (event.button !== 0) return; // left click only
+
+  // First check if we hit a placed decal
+  const decalHits = getDecalIntersect(event);
+
+  if (decalHits.length > 0) {
+    // Clicked on an existing decal
+    const hitMesh = decalHits[0].object;
+    const decal = state.decalObjects.find(d => d.mesh === hitMesh);
+    if (decal) {
+      selectDecal(decal.id);
+      // Start dragging
+      state.isDragging = true;
+      state.dragOffset.set(event.clientX, event.clientY);
+      viewport.classList.add('grabbing-decal');
+      controls.enabled = false;
+      return;
+    }
+  }
+
+  // If we have an active library decal, place it
+  if (state.activeLibId) {
+    const hits = getIntersect(event);
+    if (hits.length > 0) {
+      const libDecal = state.decalLibrary.find(d => d.id === state.activeLibId);
+      if (libDecal) {
+        addDecalToScene(hits[0], libDecal);
+        setStatus('ready', '贴花已放置 · 拖动可移动');
+        return;
+      }
+    }
+  }
+
+  // Clicked on empty space — deselect
+  deselectAll();
+}
+
+function onViewportMouseMove(event) {
+  if (state.isDragging && state.selectedDecal) {
+    const decal = state.decalObjects.find(d => d.id === state.selectedDecal);
+    if (!decal) return;
+
+    const hits = getIntersect(event);
+    if (hits.length > 0) {
+      moveDecal(decal, hits[0]);
+    }
+    return;
+  }
+
+  // Hover tooltip
+  if (state.activeLibId) {
+    const hits = getIntersect(event);
+    if (hits.length > 0) {
+      tooltip.style.display = 'block';
+      tooltip.style.left = (event.clientX + 16) + 'px';
+      tooltip.style.top = (event.clientY - 28) + 'px';
+      const lib = state.decalLibrary.find(d => d.id === state.activeLibId);
+      tooltip.textContent = lib ? `放置: ${lib.name}` : '';
+      return;
+    }
+  }
+
+  // Check if hovering over a decal
+  const decalHits = getDecalIntersect(event);
+  if (decalHits.length > 0) {
+    const decal = state.decalObjects.find(d => d.mesh === decalHits[0].object);
+    if (decal && decal.id !== state.selectedDecal) {
+      tooltip.style.display = 'block';
+      tooltip.style.left = (event.clientX + 16) + 'px';
+      tooltip.style.top = (event.clientY - 28) + 'px';
+      const lib = state.decalLibrary.find(d => d.id === decal.libId);
+      tooltip.textContent = lib ? lib.name : '贴花';
+      viewport.style.cursor = 'pointer';
+      return;
+    }
+  }
+
+  tooltip.style.display = 'none';
+  viewport.style.cursor = state.activeLibId ? 'crosshair' : '';
+}
+
+function onViewportMouseUp() {
+  if (state.isDragging) {
+    state.isDragging = false;
+    viewport.classList.remove('grabbing-decal');
+    controls.enabled = true;
+  }
+}
+
+renderer.domElement.addEventListener('mousedown', onViewportMouseDown);
+renderer.domElement.addEventListener('mousemove', onViewportMouseMove);
+window.addEventListener('mouseup', onViewportMouseUp);
+
+// Touch support
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    onViewportMouseDown({ button: 0, clientX: touch.clientX, clientY: touch.clientY });
+  }
+});
+renderer.domElement.addEventListener('touchmove', (e) => {
+  if (e.touches.length === 1 && state.isDragging) {
+    const touch = e.touches[0];
+    onViewportMouseMove({ clientX: touch.clientX, clientY: touch.clientY });
+  }
+});
+renderer.domElement.addEventListener('touchend', onViewportMouseUp);
+
+// ============ CAR COLOR ============
+let originalCarColors = null;
+
+function applyCarColor(hex) {
+  const color = new THREE.Color(hex);
+  state.carMeshes.forEach(mesh => {
+    // Handle both single material and multi-material meshes
+    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    materials.forEach(mat => {
+      if (mat && mat.color && mat.isMaterial && !mat.isShadowMaterial) {
+        if (!originalCarColors) originalCarColors = new Map();
+        const key = mesh.uuid;
+        if (!originalCarColors.has(key)) {
+          originalCarColors.set(key, mat.color.getHex());
+        }
+        mat.color.set(color);
+        mat.needsUpdate = true;
+      }
+    });
+  });
+}
+
+document.getElementById('car-color').addEventListener('input', (e) => {
+  if (state.carMeshes.length) applyCarColor(e.target.value);
+});
+
+document.getElementById('btn-reset-color').addEventListener('click', () => {
+  if (!originalCarColors || !state.carMeshes.length) return;
+  const defaultHex = '#c8d0d8';
+  document.getElementById('car-color').value = defaultHex;
+  applyCarColor(defaultHex);
+  originalCarColors = null;
+});
+
+// ============ LIGHTING ============
+let fillLight2 = null;
+
+function ensureFillLight2() {
+  if (!fillLight2) {
+    fillLight2 = new THREE.DirectionalLight('#ccddff', 0.5);
+    fillLight2.position.set(3, 1, 4);
+    scene.add(fillLight2);
+  }
+  return fillLight2;
+}
+
+document.getElementById('light-ambient').addEventListener('input', (e) => {
+  const val = parseInt(e.target.value) / 100;
+  document.getElementById('val-ambient').textContent = e.target.value;
+  ambientLight.intensity = val;
+});
+
+document.getElementById('light-main').addEventListener('input', (e) => {
+  const val = parseInt(e.target.value) / 100;
+  document.getElementById('val-main').textContent = e.target.value;
+  sun.intensity = val;
+});
+
+document.querySelectorAll('[data-light-preset]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const preset = btn.dataset.lightPreset;
+    let ambVal, mainVal, sunPos, fillPos, fill2Pos, fillIntensity, fill2Intensity;
+
+    switch (preset) {
+      case 'studio':
+        ambVal = 60; mainVal = 350;
+        sunPos = [4, 6, 3]; fillPos = [-4, 2, -3]; fill2Pos = [2, 1, -5];
+        fillIntensity = 1.8; fill2Intensity = 1.0;
+        break;
+      case 'top':
+        ambVal = 40; mainVal = 400;
+        sunPos = [0, 8, 0.5]; fillPos = [0, 0, 0]; fill2Pos = [0, 0, 0];
+        fillIntensity = 0; fill2Intensity = 0;
+        break;
+      case 'all':
+        ambVal = 80; mainVal = 250;
+        sunPos = [0, 5, 0]; fillPos = [-5, 2, 5]; fill2Pos = [5, 2, -5];
+        fillIntensity = 2.5; fill2Intensity = 2.5;
+        break;
+    }
+
+    // Apply
+    document.getElementById('light-ambient').value = ambVal;
+    document.getElementById('val-ambient').textContent = ambVal;
+    ambientLight.intensity = ambVal / 100;
+
+    document.getElementById('light-main').value = mainVal;
+    document.getElementById('val-main').textContent = mainVal;
+    sun.intensity = mainVal / 100;
+    sun.position.set(...sunPos);
+
+    if (fillLight) {
+      fillLight.intensity = fillIntensity;
+      fillLight.position.set(...fillPos);
+    }
+
+    const fl2 = ensureFillLight2();
+    fl2.intensity = fill2Intensity;
+    fl2.position.set(...fill2Pos);
+  });
+});
+document.getElementById('ctrl-width').addEventListener('input', (e) => {
+  document.getElementById('val-width').textContent = parseFloat(e.target.value).toFixed(2);
+  updateSelectedDecalSize();
+});
+document.getElementById('ctrl-height').addEventListener('input', (e) => {
+  document.getElementById('val-height').textContent = parseFloat(e.target.value).toFixed(2);
+  updateSelectedDecalSize();
+});
+document.getElementById('ctrl-rotation').addEventListener('input', (e) => {
+  document.getElementById('val-rotation').textContent = Math.round(e.target.value) + '°';
+  updateSelectedDecalSize();
+});
+
+document.getElementById('btn-delete-decal').addEventListener('click', () => {
+  if (state.selectedDecal) {
+    deleteDecal(state.selectedDecal);
+    setStatus('ready', '贴花已删除');
+  }
+});
+
+document.getElementById('btn-duplicate-decal').addEventListener('click', () => {
+  if (!state.selectedDecal) return;
+  const orig = state.decalObjects.find(d => d.id === state.selectedDecal);
+  if (!orig) return;
+
+  // Create a duplicate slightly offset
+  const pos = orig.position.clone().add(new THREE.Vector3(0.05, 0, 0.05));
+  const fakeIntersect = { point: pos, face: { normal: orig.normal }, object: orig.targetMesh };
+  const libDecal = state.decalLibrary.find(d => d.id === orig.libId);
+  if (libDecal) {
+    document.getElementById('ctrl-width').value = orig.width;
+    document.getElementById('ctrl-height').value = orig.height;
+    document.getElementById('ctrl-rotation').value = orig.rotation;
+    addDecalToScene(fakeIntersect, libDecal);
+    setStatus('ready', '贴花已复制');
+  }
+});
+
+// ============ BUTTONS ============
+document.getElementById('btn-import-decal').addEventListener('click', () => {
+  document.getElementById('img-input').click();
+});
+document.getElementById('img-input').addEventListener('change', (e) => {
+  if (e.target.files.length) importImages(e.target.files);
+  e.target.value = '';
+});
+
+// ============ EXPORT ============
+const exportModal = document.getElementById('export-modal');
+
+document.getElementById('btn-export').addEventListener('click', () => {
+  exportModal.classList.add('show');
+});
+
+document.getElementById('btn-close-export').addEventListener('click', () => {
+  exportModal.classList.remove('show');
+});
+
+function exportView(viewName) {
+  if (!state.carBounds) { toast('请先加载模型'); return; }
+
+  const size = state.carBounds.size;
+  const center = state.carBounds.center;
+  const maxDim = Math.max(size.x, size.y, size.z) * 1.3;
+  const viewCam = new THREE.OrthographicCamera(-maxDim/2, maxDim/2, maxDim/2, -maxDim/2, 0.1, 100);
+
+  const views = {
+    left:  { pos: [-maxDim*2, center.y, 0], look: [0, center.y, 0], up: [0, 1, 0] },
+    right: { pos: [maxDim*2, center.y, 0],  look: [0, center.y, 0], up: [0, 1, 0] },
+    front: { pos: [0, center.y, -maxDim*2], look: [0, center.y, 0], up: [0, 1, 0] },
+    rear:  { pos: [0, center.y, maxDim*2],  look: [0, center.y, 0], up: [0, 1, 0] },
+    top:   { pos: [0, maxDim*2, 0],         look: [0, 0, 0],      up: [0, 0, -1] },
+  };
+
+  const view = views[viewName];
+  if (!view) return;
+
+  viewCam.position.set(...view.pos);
+  viewCam.lookAt(...view.look);
+  viewCam.up.set(...view.up);
+
+  // Render to offscreen
+  const exportSize = 2048;
+  renderer.setSize(exportSize, exportSize);
+  renderer.render(scene, viewCam);
+
+  const dataUrl = renderer.domElement.toDataURL('image/png');
+  const link = document.createElement('a');
+  link.download = `firefly_wrap_${viewName}.png`;
+  link.href = dataUrl;
+  link.click();
+
+  // Restore
+  resize(); // restores viewport size
+  renderer.setClearColor('#1a1a1f');
+  toast(`已导出: ${viewName}.png`);
+}
+
+function exportAll() {
+  ['front', 'rear', 'left', 'right', 'top'].forEach((v, i) => {
+    setTimeout(() => exportView(v), i * 300);
+  });
+  toast('正在导出全部视图...');
+}
+
+document.querySelectorAll('[data-export]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const viewName = btn.dataset.export;
+    if (viewName === 'all') {
+      exportAll();
+    } else {
+      exportView(viewName);
+    }
+    exportModal.classList.remove('show');
+  });
+});
+
+// ============ MODEL LOADING ============
+function computeBounds() {
+  const box = new THREE.Box3();
+  state.carMeshes.forEach(m => {
+    m.geometry.computeBoundingBox();
+    box.expandByObject(m);
+  });
+  const c = new THREE.Vector3(), s = new THREE.Vector3();
+  box.getCenter(c); box.getSize(s);
+  state.carBounds = { center: c, size: s };
+}
+
+function loadModel(file) {
+  const url = URL.createObjectURL(file);
+  const loader = new GLTFLoader();
+  const draco = new DRACOLoader();
+  draco.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+  loader.setDRACOLoader(draco);
+
+  setStatus('loading', '加载中...');
+
+  loader.load(url, (gltf) => {
+    state.model = gltf.scene;
+    scene.add(state.model);
+
+    state.carMeshes = [];
+    state.model.traverse(c => {
+      if (c.isMesh) { state.carMeshes.push(c); c.castShadow = true; c.receiveShadow = true; }
+    });
+
+    computeBounds();
+
+    if (state.carBounds) {
+      // Auto-lift model so wheels touch ground
+      const c = state.carBounds.center;
+      const bottomY = c.y - state.carBounds.size.y / 2;
+      if (bottomY < 0) {
+        state.model.position.y += -bottomY;
+        computeBounds(); // recalculate after lifting
+      }
+      const maxDim = Math.max(state.carBounds.size.x, state.carBounds.size.y, state.carBounds.size.z);
+      camera.position.set(maxDim*1.2, maxDim*0.5, maxDim*1.2);
+      controls.target.copy(state.carBounds.center);
+      controls.update();
+    }
+
+    document.getElementById('drop-overlay').style.display = 'none';
+    document.getElementById('model-name').textContent =
+      `模型: ${file.name} (${state.carMeshes.length} mesh)`;
+    setStatus('ready', `已加载 · 点击 ＋ 导入贴花开始`);
+    resize();
+
+    // Apply initial car color from picker
+    const carColor = document.getElementById('car-color').value;
+    applyCarColor(carColor);
+    originalCarColors = null; // Store fresh after model load
+
+    URL.revokeObjectURL(url);
+  }, (p) => {
+    setStatus('loading', `加载 ${Math.round(p.loaded/p.total*100)}%`);
+  }, (err) => {
+    setStatus('warn', '加载失败');
+    toast('模型加载失败: ' + err.message);
+  });
+}
+
+// File input
+document.getElementById('file-input').addEventListener('change', e => {
+  if (e.target.files[0]) loadModel(e.target.files[0]);
+});
+document.getElementById('btn-load-model').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+document.getElementById('btn-pick-file').addEventListener('click', () => {
+  document.getElementById('file-input').click();
+});
+
+// Drag & drop
+document.addEventListener('dragover', e => { e.preventDefault(); });
+document.addEventListener('drop', e => {
+  e.preventDefault();
+  const f = e.dataTransfer.files[0];
+  if (f && (f.name.endsWith('.glb') || f.name.endsWith('.gltf'))) loadModel(f);
+});
+
+// ============ UTILS ============
+function resize() {
+  const w = viewport.clientWidth, h = viewport.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / Math.max(h, 1);
+  camera.updateProjectionMatrix();
+}
+
+function setStatus(type, msg) {
+  document.getElementById('status-text').textContent = msg;
+  const dot = document.getElementById('status-dot');
+  dot.classList.toggle('warn', type === 'warn' || type === 'loading');
+}
+function updateDecalCount() {
+  document.getElementById('decal-count').textContent = state.decalObjects.length;
+}
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2000);
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { deselectAll(); state.activeLibId = null; viewport.classList.remove('place-mode'); renderLibrary(); }
+  if (e.key === 'Delete' || e.key === 'Backspace') {
+    if (state.selectedDecal && document.activeElement === document.body) {
+      deleteDecal(state.selectedDecal);
+    }
+  }
+});
+
+// ============ INIT ============
+resize();
+window.addEventListener('resize', resize);
+animate();
+setStatus('warn', '请加载 GLB 模型');
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+</script>
+</body>
+</html>
