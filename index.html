@@ -250,32 +250,18 @@
     </div>
 
     <div style="border-top:1px solid var(--border);margin-top:4px;padding-top:0"></div>
-    <h3>🎨 车身颜色</h3>
-    <div style="padding: 0 12px 6px">
-      <div class="ctrl-row">
-        <input type="color" id="car-color" value="#c8d0d8" style="width:100%;height:32px;border:1px solid var(--border);border-radius:4px;cursor:pointer;background:none;padding:2px">
-        <button class="btn small" id="btn-reset-color" style="flex-shrink:0">重置</button>
-      </div>
-    </div>
-
-    <div style="border-top:1px solid var(--border);margin-top:4px"></div>
-    <h3>💡 灯光</h3>
-    <div style="padding: 0 12px 6px;display:flex;flex-direction:column;gap:6px">
-      <div class="ctrl-row">
-        <label>环境光</label>
-        <input type="range" id="light-ambient" min="0" max="200" value="50">
-        <span class="val" id="val-ambient">50</span>
-      </div>
-      <div class="ctrl-row">
-        <label>主光强</label>
-        <input type="range" id="light-main" min="0" max="500" value="350">
-        <span class="val" id="val-main">350</span>
+    <h3>📷 正交视图</h3>
+    <div style="padding:0 12px 6px;display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;gap:4px">
+        <button class="btn small" data-ortho="front" style="flex:1">▲ 前</button>
+        <button class="btn small" data-ortho="rear" style="flex:1">▼ 后</button>
       </div>
       <div style="display:flex;gap:4px">
-        <button class="btn small" data-light-preset="studio">📸 摄影棚</button>
-        <button class="btn small" data-light-preset="top">☀️ 顶光</button>
-        <button class="btn small" data-light-preset="all">💡 全亮</button>
+        <button class="btn small" data-ortho="left" style="flex:1">◀ 左</button>
+        <button class="btn small" data-ortho="right" style="flex:1">▶ 右</button>
       </div>
+      <button class="btn small" data-ortho="top" style="width:100%">⬆ 顶部</button>
+      <button class="btn small" data-ortho="persp" style="width:100%">🔄 透视</button>
     </div>
   </div>
 
@@ -293,7 +279,7 @@
 </div>
 
 <input type="file" id="file-input" accept=".glb,.gltf">
-<input type="file" id="img-input" accept="image/png,image/jpeg,image/webp" multiple>
+<input type="file" id="img-input" accept="image/png,image/jpeg,image/webp,image/svg+xml,.svg" multiple>
 
 <div id="tooltip"></div>
 <div id="toast"></div>
@@ -347,8 +333,6 @@ const state = {
 const viewport = document.getElementById('viewport');
 const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.1;
 viewport.appendChild(renderer.domElement);
@@ -369,32 +353,17 @@ controls.maxDistance = 15;
 controls.maxPolarAngle = Math.PI * 0.8;
 controls.update();
 
-// Lighting
-const ambientLight = new THREE.AmbientLight('#ffffff', 0.5);
+// Flat lighting — ambient only, no directional shadows
+const ambientLight = new THREE.AmbientLight('#ffffff', 2.5);
 scene.add(ambientLight);
-const sun = new THREE.DirectionalLight('#ffffff', 3.5);
-sun.position.set(5, 8, 3);
-sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.near = 0.5;
-sun.shadow.camera.far = 50;
-sun.shadow.camera.left = -10;
-sun.shadow.camera.right = 10;
-sun.shadow.camera.top = 10;
-sun.shadow.camera.bottom = -10;
-sun.shadow.bias = -0.0001;
-scene.add(sun);
-const fillLight = new THREE.DirectionalLight('#8899cc', 1.0);
-fillLight.position.set(-2, 1, -1);
-scene.add(fillLight);
+// No directional lights — all faces evenly lit
 
-// Ground
+// Ground plane
 const ground = new THREE.Mesh(
   new THREE.PlaneGeometry(20, 20),
-  new THREE.ShadowMaterial({ opacity: 0.35 })
+  new THREE.MeshBasicMaterial({ color: '#2a2a2f', transparent: true, opacity: 0.3 })
 );
 ground.rotation.x = -Math.PI / 2;
-ground.receiveShadow = true;
 scene.add(ground);
 scene.add(new THREE.GridHelper(10, 20, '#444', '#2a2a2a').translateY(0.001));
 
@@ -495,8 +464,7 @@ function selectDecal(id) {
   if (state.selectedDecal) {
     const prev = state.decalObjects.find(d => d.id === state.selectedDecal);
     if (prev) {
-      prev.mesh.material.emissive?.setHex(0x000000);
-      prev.mesh.material.emissiveIntensity = 0;
+      prev.mesh.material.opacity = 1;
     }
   }
 
@@ -515,21 +483,14 @@ function selectDecal(id) {
   document.getElementById('val-height').textContent = decal.height.toFixed(2);
   document.getElementById('val-rotation').textContent = Math.round(decal.rotation) + '°';
 
-  // Highlight
-  if (decal.mesh.material.emissive) {
-    decal.mesh.material.emissive.setHex(0x9b59b6);
-    decal.mesh.material.emissiveIntensity = 0.3;
-  }
-
   renderLayerList();
 }
 
 function deselectAll() {
   if (state.selectedDecal) {
     const prev = state.decalObjects.find(d => d.id === state.selectedDecal);
-    if (prev && prev.mesh.material.emissive) {
-      prev.mesh.material.emissive.setHex(0x000000);
-      prev.mesh.material.emissiveIntensity = 0;
+    if (prev) {
+      prev.mesh.material.opacity = 1;
     }
   }
   state.selectedDecal = null;
@@ -680,20 +641,52 @@ function removeFromLibrary(id) {
 
 function importImages(files) {
   Array.from(files).forEach(file => {
-    if (!file.type.startsWith('image/')) return;
+    const isSvg = file.name.endsWith('.svg') || file.type === 'image/svg+xml';
+    if (!file.type.startsWith('image/') && !isSvg) return;
+
     const reader = new FileReader();
     reader.onload = (e) => {
-      const img = new Image();
-      img.onload = () => {
-        const tex = new THREE.Texture(img);
-        tex.colorSpace = THREE.SRGBColorSpace;
-        tex.wrapS = THREE.ClampToEdgeWrapping;
-        tex.wrapT = THREE.ClampToEdgeWrapping;
-        tex.needsUpdate = true;
-        addToLibrary(file.name.replace(/\.[^.]+$/, ''), tex);
-        setStatus('ready', `已导入: ${file.name}`);
-      };
-      img.src = e.target.result;
+      if (isSvg) {
+        // Convert SVG to bitmap via canvas
+        const svgText = e.target.result;
+        const blob = new Blob([svgText], { type: 'image/svg+xml' });
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        img.onload = () => {
+          // Render SVG at 1024px width, preserving aspect ratio
+          const canvas = document.createElement('canvas');
+          const scale = 1024 / img.width;
+          canvas.width = 1024;
+          canvas.height = Math.round(img.height * scale);
+          const ctx = canvas.getContext('2d');
+          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+          URL.revokeObjectURL(url);
+
+          const tex = new THREE.CanvasTexture(canvas);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.wrapS = THREE.ClampToEdgeWrapping;
+          tex.wrapT = THREE.ClampToEdgeWrapping;
+          tex.premultiplyAlpha = false;
+          tex.needsUpdate = true;
+          addToLibrary(file.name.replace(/\.[^.]+$/, ''), tex);
+          setStatus('ready', `已导入: ${file.name}`);
+        };
+        img.src = url;
+      } else {
+        // Raster image (PNG/JPEG/WebP)
+        const img = new Image();
+        img.onload = () => {
+          const tex = new THREE.Texture(img);
+          tex.colorSpace = THREE.SRGBColorSpace;
+          tex.wrapS = THREE.ClampToEdgeWrapping;
+          tex.wrapT = THREE.ClampToEdgeWrapping;
+          tex.premultiplyAlpha = false;
+          tex.needsUpdate = true;
+          addToLibrary(file.name.replace(/\.[^.]+$/, ''), tex);
+          setStatus('ready', `已导入: ${file.name}`);
+        };
+        img.src = e.target.result;
+      }
     };
     reader.readAsDataURL(file);
   });
@@ -821,107 +814,48 @@ renderer.domElement.addEventListener('touchmove', (e) => {
 });
 renderer.domElement.addEventListener('touchend', onViewportMouseUp);
 
-// ============ CAR COLOR ============
-let originalCarColors = null;
-
-function applyCarColor(hex) {
-  const color = new THREE.Color(hex);
-  state.carMeshes.forEach(mesh => {
-    // Handle both single material and multi-material meshes
-    const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
-    materials.forEach(mat => {
-      if (mat && mat.color && mat.isMaterial && !mat.isShadowMaterial) {
-        if (!originalCarColors) originalCarColors = new Map();
-        const key = mesh.uuid;
-        if (!originalCarColors.has(key)) {
-          originalCarColors.set(key, mat.color.getHex());
-        }
-        mat.color.set(color);
-        mat.needsUpdate = true;
-      }
-    });
-  });
-}
-
-document.getElementById('car-color').addEventListener('input', (e) => {
-  if (state.carMeshes.length) applyCarColor(e.target.value);
-});
-
-document.getElementById('btn-reset-color').addEventListener('click', () => {
-  if (!originalCarColors || !state.carMeshes.length) return;
-  const defaultHex = '#c8d0d8';
-  document.getElementById('car-color').value = defaultHex;
-  applyCarColor(defaultHex);
-  originalCarColors = null;
-});
-
-// ============ LIGHTING ============
-let fillLight2 = null;
-
-function ensureFillLight2() {
-  if (!fillLight2) {
-    fillLight2 = new THREE.DirectionalLight('#ccddff', 0.5);
-    fillLight2.position.set(3, 1, 4);
-    scene.add(fillLight2);
-  }
-  return fillLight2;
-}
-
-document.getElementById('light-ambient').addEventListener('input', (e) => {
-  const val = parseInt(e.target.value) / 100;
-  document.getElementById('val-ambient').textContent = e.target.value;
-  ambientLight.intensity = val;
-});
-
-document.getElementById('light-main').addEventListener('input', (e) => {
-  const val = parseInt(e.target.value) / 100;
-  document.getElementById('val-main').textContent = e.target.value;
-  sun.intensity = val;
-});
-
-document.querySelectorAll('[data-light-preset]').forEach(btn => {
+// ============ ORTHO VIEW BUTTONS ============
+document.querySelectorAll('[data-ortho]').forEach(btn => {
   btn.addEventListener('click', () => {
-    const preset = btn.dataset.lightPreset;
-    let ambVal, mainVal, sunPos, fillPos, fill2Pos, fillIntensity, fill2Intensity;
+    if (!state.carBounds) return;
+    const c = state.carBounds.center;
+    const s = state.carBounds.size;
+    const dist = Math.max(s.x, s.y, s.z) * 2;
 
-    switch (preset) {
-      case 'studio':
-        ambVal = 60; mainVal = 350;
-        sunPos = [4, 6, 3]; fillPos = [-4, 2, -3]; fill2Pos = [2, 1, -5];
-        fillIntensity = 1.8; fill2Intensity = 1.0;
-        break;
-      case 'top':
-        ambVal = 40; mainVal = 400;
-        sunPos = [0, 8, 0.5]; fillPos = [0, 0, 0]; fill2Pos = [0, 0, 0];
-        fillIntensity = 0; fill2Intensity = 0;
-        break;
-      case 'all':
-        ambVal = 80; mainVal = 250;
-        sunPos = [0, 5, 0]; fillPos = [-5, 2, 5]; fill2Pos = [5, 2, -5];
-        fillIntensity = 2.5; fill2Intensity = 2.5;
-        break;
+    const views = {
+      front: { pos: [c.x, c.y, c.z - dist], target: [c.x, c.y, c.z] },
+      rear:  { pos: [c.x, c.y, c.z + dist], target: [c.x, c.y, c.z] },
+      left:  { pos: [c.x - dist, c.y, c.z], target: [c.x, c.y, c.z] },
+      right: { pos: [c.x + dist, c.y, c.z], target: [c.x, c.y, c.z] },
+      top:   { pos: [c.x, c.y + dist, c.z], target: [c.x, c.y, c.z] },
+      persp: { pos: [c.x + dist*0.7, c.y + dist*0.4, c.z + dist*0.7], target: [c.x, c.y, c.z] },
+    };
+
+    const view = views[btn.dataset.ortho];
+    if (!view) return;
+
+    // Smooth animate camera
+    const startPos = camera.position.clone();
+    const startTarget = controls.target.clone();
+    const endPos = new THREE.Vector3(...view.pos);
+    const endTarget = new THREE.Vector3(...view.target);
+    const startTime = performance.now();
+    const duration = 500;
+
+    function animStep() {
+      const elapsed = performance.now() - startTime;
+      const t = Math.min(elapsed / duration, 1.0);
+      // Ease in-out
+      const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;
+      camera.position.lerpVectors(startPos, endPos, ease);
+      controls.target.lerpVectors(startTarget, endTarget, ease);
+      controls.update();
+      if (t < 1) requestAnimationFrame(animStep);
     }
-
-    // Apply
-    document.getElementById('light-ambient').value = ambVal;
-    document.getElementById('val-ambient').textContent = ambVal;
-    ambientLight.intensity = ambVal / 100;
-
-    document.getElementById('light-main').value = mainVal;
-    document.getElementById('val-main').textContent = mainVal;
-    sun.intensity = mainVal / 100;
-    sun.position.set(...sunPos);
-
-    if (fillLight) {
-      fillLight.intensity = fillIntensity;
-      fillLight.position.set(...fillPos);
-    }
-
-    const fl2 = ensureFillLight2();
-    fl2.intensity = fill2Intensity;
-    fl2.position.set(...fill2Pos);
+    animStep();
   });
 });
+
 document.getElementById('ctrl-width').addEventListener('input', (e) => {
   document.getElementById('val-width').textContent = parseFloat(e.target.value).toFixed(2);
   updateSelectedDecalSize();
@@ -1205,7 +1139,7 @@ function loadModel(file) {
 
     state.carMeshes = [];
     state.model.traverse(c => {
-      if (c.isMesh) { state.carMeshes.push(c); c.castShadow = true; c.receiveShadow = true; }
+      if (c.isMesh) { state.carMeshes.push(c); }
     });
 
     computeBounds();
@@ -1229,11 +1163,6 @@ function loadModel(file) {
       `模型: ${file.name} (${state.carMeshes.length} mesh)`;
     setStatus('ready', `已加载 · 点击 ＋ 导入贴花开始`);
     resize();
-
-    // Apply initial car color from picker
-    const carColor = document.getElementById('car-color').value;
-    applyCarColor(carColor);
-    originalCarColors = null; // Store fresh after model load
 
     URL.revokeObjectURL(url);
   }, (p) => {
