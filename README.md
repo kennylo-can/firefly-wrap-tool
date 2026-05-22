@@ -41,3 +41,9 @@
 | 删除贴花 | 选中后按 Delete 或点删除按钮 |
 | 取消选择 | 点空白区域或按 Esc |
 | 导出视图 | 点击「📥 导出视图」|
+
+
+##如何使用
+ 本项目由Deepseek V4 Pro和Claude Opus 4.7 联袂呈现，Agent为OpenHanako
+ 访问这个地址即可尝试
+ https://kennylo-can.github.io/firefly-wrap-tool/
