@@ -279,10 +279,12 @@
   /* ===== MOBILE ===== */
   @media (max-width: 768px) {
     #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 32px; }
-    #toolbar { gap: 4px; padding: 0 8px; }
-    #toolbar .title { font-size: 13px; }
-    #toolbar .btn { font-size: 10px; padding: 5px 8px; }
+    #toolbar { gap: 4px; padding: 0 8px; overflow-x: auto; flex-shrink: 0; }
+    #toolbar .title { font-size: 12px; flex-shrink: 0; }
+    #toolbar .btn { font-size: 10px; padding: 4px 7px; flex-shrink: 0; }
     #toolbar .hint, #toolbar .sep { display: none; }
+    /* Hide non-essential toolbar buttons on mobile */
+    #btn-load-model, #btn-undo, #btn-redo, #btn-share { display: none; }
 
     /* Hamburger */
     #btn-menu {
