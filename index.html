@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Firefly Wrap Designer</title>
 <style>
   :root {
@@ -276,6 +276,8 @@
   }
   .quick-colors .swatch { border-radius: 3px; }
 
+  #btn-menu { display: none; }
+
   /* ===== MOBILE ===== */
   @media (max-width: 768px) {
     #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 32px; }
@@ -283,12 +285,10 @@
     #toolbar .title { font-size: 12px; flex-shrink: 0; }
     #toolbar .btn { font-size: 10px; padding: 4px 7px; flex-shrink: 0; }
     #toolbar .hint, #toolbar .sep { display: none; }
-    /* Hide non-essential toolbar buttons on mobile */
     #btn-load-model, #btn-undo, #btn-redo, #btn-share { display: none; }
 
-    /* Hamburger */
     #btn-menu {
-      display: flex; align-items: center; justify-content: center;
+      display: flex !important; align-items: center; justify-content: center;
       width: 36px; height: 36px; border: 1px solid var(--border);
       border-radius: 5px; background: transparent; color: var(--text);
       cursor: pointer; font-size: 18px; margin-left: auto;
@@ -297,10 +297,11 @@
     /* Sidebar → bottom drawer */
     #sidebar {
       position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
-      max-height: 65vh; border-left: none; border-top: 1px solid var(--border);
+      max-height: 60vh; border-left: none; border-top: 1px solid var(--border);
       border-radius: 12px 12px 0 0;
       transform: translateY(100%); transition: transform 0.25s ease;
       box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+      padding-bottom: env(safe-area-inset-bottom, 12px);
     }
     #sidebar.open { transform: translateY(0); }
 
@@ -310,7 +311,7 @@
     }
     #sidebar-backdrop.show { display: block; }
 
-    #statusbar { padding: 0 10px; font-size: 10px; }
+    #statusbar { padding: 0 10px; font-size: 10px; padding-bottom: env(safe-area-inset-bottom, 0px); }
 
     /* Bigger touch targets */
     .decal-thumb { width: 48px; height: 48px; }
@@ -326,8 +327,6 @@
     .paint-group-btn { padding: 10px 6px; font-size: 12px; }
     #share-url-display { font-size: 10px; }
   }
-
-  #btn-menu { display: none; }
 </style>
 </head>
 <body>
