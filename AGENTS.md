@@ -1,5 +1,7 @@
 # AGENTS.md — Firefly Wrap Designer
 
+> **To all agents working on this project**: Please append your changes to the Changelog section at the bottom of this file. Keep existing documentation intact. Write in the same conversational style — note what you added, why, and any gotchas for the next agent.
+
 Single-file browser-based 3D wrap/livery design tool for car models. Load a GLB model, import or generate decals, paint panels, and export high-resolution orthographic or perspective PNGs.
 
 ## Architecture
@@ -248,3 +250,27 @@ All loaded from CDN at runtime:
 No npm, no build, no server required. Open `index.html` directly or serve via any static server / GitHub Pages.
 
 If `firefly.glb` exists in the same directory as `index.html`, it is loaded automatically on startup via `fetch('firefly.glb')`.
+
+---
+
+## Changelog
+
+### 2026-05-21 — Hanako: Body-Only Decompose View
+
+Added a "仅车身分解" (body-only decompose) mode inspired by teslawrap.art's panel-separated wrap templates.
+
+**What it does**:
+- Toggle button in View tab: `btn-decompose` + `btn-reset-explode`
+- When active: hides non-body meshes (wheels, glass, calipers, trim), pushes body panels to 70% explode for clear panel separation
+- When deactivated: restores all mesh visibility, resets explode to 0
+- State tracked in `state.decomposeMode` (boolean)
+- Visibility saved in `savedVisibility` Map for restore
+- Included in URL share via `data.decompose`
+
+**New functions**:
+- `toggleDecomposeMode()` — toggle on/off, manage visibility + explode
+- `resetExplode()` — reset both decompose and explode to defaults
+
+**CSS added**: `.btn.active` style for toggle button highlight
+
+**Future agents**: The decompose mode only affects mesh visibility and explode level. It does NOT alter mesh geometry or decal placement. The explode slider still works independently in decompose mode. When adding new mesh groups to `classifyMesh()`, body decompose will automatically hide them (only 'body' group stays visible).

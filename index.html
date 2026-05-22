@@ -41,6 +41,7 @@
   .btn:disabled { opacity: 0.35; cursor: not-allowed; }
   .btn.accent { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.danger { border-color: var(--danger); color: var(--danger); }
+  .btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
   .btn.small { padding: 3px 8px; font-size: 10px; }
 
   /* Viewport */
@@ -420,6 +421,10 @@
         <div style="font-size:10px;color:var(--text-dim);padding:4px 0">
           展开车身各面板用于在被遮挡的区域贴花、查看结构。贴花会跟随面板移动。
         </div>
+        <div style="display:flex;gap:4px;margin-top:2px">
+          <button class="btn small" id="btn-decompose">📐 仅车身分解</button>
+          <button class="btn small" id="btn-reset-explode">↺ 重置</button>
+        </div>
       </div>
 
       <h3>视角</h3>
@@ -637,6 +642,7 @@ const state = {
   paintColor: '#ffffff',
   pickedMeshes: new Set(),
   explodeAmount: 0,
+  decomposeMode: false,  // body-only decompose view (hide non-body, panels separated)
   lockRatio: true,
   currentMaterialPreset: null,
   history: [],
@@ -1346,6 +1352,8 @@ function classifyMesh(mesh) {
 }
 
 // ============ EXPLODE ============
+let savedVisibility = null;
+
 function updateExplode(amount) {
   state.explodeAmount = amount;
   state.carMeshes.forEach(mesh => {
@@ -1353,12 +1361,54 @@ function updateExplode(amount) {
     if (!info) return;
     mesh.position.copy(info.originalPos).addScaledVector(info.explodeDir, amount);
   });
-  // Rebuild all decal geometries — localToWorld now returns updated world pos per exploded mesh
   state.decalObjects.forEach(d => rebuildDecalGeometry(d));
-  // Sync highlight overlays
   highlightOverlays.forEach((overlay, mesh) => {
     overlay.position.copy(mesh.position);
   });
+}
+
+function toggleDecomposeMode() {
+  state.decomposeMode = !state.decomposeMode;
+  const btn = document.getElementById('btn-decompose');
+
+  if (state.decomposeMode) {
+    btn.classList.add('active');
+    btn.textContent = '📐 仅车身分解 ✓';
+    // Save and hide non-body meshes
+    savedVisibility = new Map();
+    state.carMeshes.forEach(mesh => {
+      savedVisibility.set(mesh, mesh.visible);
+      const info = state.meshInfo.get(mesh);
+      if (info && info.group !== 'body') mesh.visible = false;
+    });
+    // Push explode to 70%
+    const maxOffset = state.carBounds ? Math.max(state.carBounds.size.x, state.carBounds.size.y, state.carBounds.size.z) * 0.5 : 1;
+    updateExplode(maxOffset * 0.7);
+    document.getElementById('ctrl-explode').value = 70;
+    document.getElementById('val-explode').textContent = '70%';
+    setStatus('ready', '车身分解视图 · 仅显示车壳面板');
+  } else {
+    btn.classList.remove('active');
+    btn.textContent = '📐 仅车身分解';
+    if (savedVisibility) {
+      state.carMeshes.forEach(mesh => {
+        if (savedVisibility.has(mesh)) mesh.visible = savedVisibility.get(mesh);
+      });
+      savedVisibility = null;
+    }
+    updateExplode(0);
+    document.getElementById('ctrl-explode').value = 0;
+    document.getElementById('val-explode').textContent = '0%';
+    setStatus('ready', '已恢复完整视图');
+  }
+}
+
+function resetExplode() {
+  if (state.decomposeMode) toggleDecomposeMode();
+  updateExplode(0);
+  document.getElementById('ctrl-explode').value = 0;
+  document.getElementById('val-explode').textContent = '0%';
+  setStatus('ready', '已重置爆炸图');
 }
 
 // ============ PANEL PICKING ============
@@ -1629,6 +1679,9 @@ document.getElementById('ctrl-explode').addEventListener('input', (e) => {
   const maxOffset = state.carBounds ? Math.max(state.carBounds.size.x, state.carBounds.size.y, state.carBounds.size.z) * 0.5 : 1;
   updateExplode((pct / 100) * maxOffset);
 });
+
+document.getElementById('btn-decompose').addEventListener('click', toggleDecomposeMode);
+document.getElementById('btn-reset-explode').addEventListener('click', resetExplode);
 
 // ============ SCENE CTRLS ============
 document.getElementById('ctrl-bg').addEventListener('input', (e) => {
@@ -2075,6 +2128,7 @@ function serializeState() {
     ground: ground.visible,
     grid: grid.visible,
     explode: state.explodeAmount,
+    decompose: state.decomposeMode,
     paints: state.carMeshes.map(m => ({
       uuid: m.uuid, name: m.name,
       mats: snapshotMaterial(m),
@@ -2117,6 +2171,7 @@ function tryApplyStateFromUrl() {
     document.getElementById('ctrl-explode').value = pct;
     document.getElementById('val-explode').textContent = Math.round(pct) + '%';
   }
+  if (data.decompose && !state.decomposeMode) toggleDecomposeMode();
   toast('已应用分享配置');
 }
 const shareModal = document.getElementById('share-modal');
