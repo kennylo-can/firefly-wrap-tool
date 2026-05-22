@@ -275,6 +275,57 @@
     display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; margin-top: 4px;
   }
   .quick-colors .swatch { border-radius: 3px; }
+
+  /* ===== MOBILE ===== */
+  @media (max-width: 768px) {
+    #app { grid-template-columns: 1fr; grid-template-rows: 48px 1fr 32px; }
+    #toolbar { gap: 4px; padding: 0 8px; }
+    #toolbar .title { font-size: 13px; }
+    #toolbar .btn { font-size: 10px; padding: 5px 8px; }
+    #toolbar .hint, #toolbar .sep { display: none; }
+
+    /* Hamburger */
+    #btn-menu {
+      display: flex; align-items: center; justify-content: center;
+      width: 36px; height: 36px; border: 1px solid var(--border);
+      border-radius: 5px; background: transparent; color: var(--text);
+      cursor: pointer; font-size: 18px; margin-left: auto;
+    }
+
+    /* Sidebar → bottom drawer */
+    #sidebar {
+      position: fixed; bottom: 0; left: 0; right: 0; z-index: 90;
+      max-height: 65vh; border-left: none; border-top: 1px solid var(--border);
+      border-radius: 12px 12px 0 0;
+      transform: translateY(100%); transition: transform 0.25s ease;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+    }
+    #sidebar.open { transform: translateY(0); }
+
+    /* Backdrop */
+    #sidebar-backdrop {
+      display: none; position: fixed; inset: 0; z-index: 89; background: rgba(0,0,0,0.5);
+    }
+    #sidebar-backdrop.show { display: block; }
+
+    #statusbar { padding: 0 10px; font-size: 10px; }
+
+    /* Bigger touch targets */
+    .decal-thumb { width: 48px; height: 48px; }
+    .layer-item { padding: 8px 6px; font-size: 12px; }
+    .layer-btns button { width: 24px; height: 24px; font-size: 12px; }
+    .ctrl-row input[type=range] { height: 20px; }
+    .tab { padding: 10px 4px; font-size: 12px; }
+    .btn { padding: 8px 14px; font-size: 13px; }
+    .btn.small { padding: 5px 10px; font-size: 11px; }
+    .ctrl-row label { font-size: 12px; min-width: 44px; }
+    .ctrl-row .val { font-size: 11px; }
+    .preset-card { padding: 10px 4px; font-size: 11px; }
+    .paint-group-btn { padding: 10px 6px; font-size: 12px; }
+    #share-url-display { font-size: 10px; }
+  }
+
+  #btn-menu { display: none; }
 </style>
 </head>
 <body>
@@ -291,6 +342,7 @@
     <button class="btn small" id="btn-share" title="生成分享链接">🔗 分享</button>
     <button class="btn small" id="btn-export">📥 导出</button>
     <span class="hint" id="model-name">未加载模型</span>
+    <button id="btn-menu" title="菜单">☰</button>
   </div>
 
   <div id="viewport"></div>
@@ -477,6 +529,7 @@
 
 <div id="tooltip"></div>
 <div id="toast"></div>
+<div id="sidebar-backdrop"></div>
 
 <!-- Export modal -->
 <div class="modal" id="export-modal">
@@ -2297,7 +2350,27 @@ window.addEventListener('resize', resize);
 setViewMode('view');
 updateUndoRedoButtons();
 animate();
-setStatus('warn', '请拖入 GLB 模型');
+setStatus('warn', '加载模型中...');
+
+// ============ MOBILE MENU ============
+const btnMenu = document.getElementById('btn-menu');
+const sidebar = document.getElementById('sidebar');
+const backdrop = document.getElementById('sidebar-backdrop');
+
+function openSidebar() {
+  sidebar.classList.add('open');
+  backdrop.classList.add('show');
+  btnMenu.textContent = '✕';
+}
+function closeSidebar() {
+  sidebar.classList.remove('open');
+  backdrop.classList.remove('show');
+  btnMenu.textContent = '☰';
+}
+btnMenu.addEventListener('click', () => {
+  sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
+});
+backdrop.addEventListener('click', closeSidebar);
 
 function animate() {
   requestAnimationFrame(animate);

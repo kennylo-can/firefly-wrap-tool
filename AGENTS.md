@@ -286,3 +286,15 @@ Added 'interior' group to `classifyMesh()`. Patterns: `interior|seat|steering|da
 **Fix**: Added `isPaintMaterial(mat)` function that checks material name for keywords (`paint`, `carpaint`). `applyPaint('color')` now calls `isPaintMaterial()` and only tints qualifying materials. Material presets (`applyPaint('material')`) still apply to all materials on the target mesh (roughness/metalness can be safely set on any PBR material).
 
 **Follow-up fix**: `isPaintMaterial` was matching ALL `mat_*` materials (5 out of 7 in the GLB), causing everything to tint. Narrowed to ONLY materials with `paint`/`carpaint` in their name. Also rewrote `classifyMesh` to use material names (not mesh node names, which are all generic "网格") as the primary classifier, with vertex count as fallback heuristic.
+
+### 2026-05-21 — Hanako: Mobile responsive layout
+
+Added responsive styles at `@media (max-width: 768px)`:
+- Grid collapses to single column: viewport full-width, sidebar → bottom drawer
+- Hamburger button (☰) in toolbar toggles sidebar slide-up from bottom (max 65vh)
+- Dark backdrop overlay, tap to close
+- Touch targets enlarged (44px+), range inputs 20px height, buttons padded
+- Toolbar hint/separator hidden on mobile
+- Added `#sidebar-backdrop` element and `openSidebar()`/`closeSidebar()` functions
+
+**Future agents**: On mobile, consider auto-closing sidebar after placing a decal or applying paint. The `#btn-menu` is hidden on desktop via `display:none`.
