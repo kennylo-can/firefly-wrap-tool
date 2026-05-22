@@ -1246,16 +1246,9 @@ function targetMeshesForPaint() {
 }
 
 function isPaintMaterial(mat) {
-  // Only tint materials that are actual car paint, not plastic/trim/chrome
   if (!mat || !mat.isMaterial) return false;
   const name = (mat.name || '').toLowerCase();
-  // Explicit paint materials from GLB
-  if (/paint|carpaint/.test(name)) return true;
-  // Generic unnamed materials with metallic properties — likely body paint
-  if (/^mat_/.test(name) && mat.metalness !== undefined && mat.metalness >= 0.5) return true;
-  // Named body paint material (not plastic, glass, etc.)
-  if (/^mat_/.test(name) && !/plastic|glass|chrome|trim|rubber|leather/.test(name)) return true;
-  return false;
+  return /paint|carpaint/.test(name);
 }
 
 function applyPaint(what /* 'color' | 'material' */) {
@@ -1357,15 +1350,23 @@ function resetMaterials() {
 
 // ============ MESH GROUPING (heuristic) ============
 function classifyMesh(mesh) {
-  const name = (mesh.name || '').toLowerCase();
-  const matName = (Array.isArray(mesh.material) ? mesh.material[0]?.name : mesh.material?.name || '').toLowerCase();
-  const tags = name + ' ' + matName;
+  const meshName = (mesh.name || '').toLowerCase();
+  // Use material name as primary classifier — mesh/node names are unreliable (all "网格")
+  const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+  const matNames = mats.map(m => (m.name || '').toLowerCase()).join(' ');
+  const tags = meshName + ' ' + matNames;
+  // Explicit material-driven classification
   if (/wheel|rim|tire|tyre|轮/.test(tags)) return 'wheels';
   if (/glass|window|windshield|玻璃|窗/.test(tags)) return 'glass';
   if (/caliper|brake|卡钳|刹车/.test(tags)) return 'calipers';
   if (/interior|seat|steering|dashboard|carpet|headliner|doorpanel|console|内饰|座|方向盘|仪表|地毯|顶棚|门板/.test(tags)) return 'interior';
-  if (/trim|chrome|grill|grille|emblem|logo|饰|镀铬|格栅/.test(tags)) return 'trim';
+  if (/trim|chrome|grill|grille|emblem|logo|plastic|饰|镀铬|格栅/.test(tags)) return 'trim';
   if (/light|lamp|head|tail|灯/.test(tags)) return 'trim';
+  if (/paint|carpaint/.test(tags)) return 'body';
+  // Fallback: use vertex count heuristic — large meshes = body, small = trim/wheels
+  const vc = mesh.geometry?.attributes?.position?.count || 0;
+  if (vc > 5000) return 'body';
+  if (vc < 500) return 'trim';
   return 'body';
 }
 
