@@ -1,6 +1,8 @@
 # Firefly Wrap Designer
 
-车身贴花/拉花 3D 设计工具。加载 GLB 模型，导入 PNG/SVG 贴花，在 3D 车身上自由拖动摆放，车身改色，导出平面图。
+蔚来Firefly萤火虫 车身贴花/拉花 3D 设计工具。加载 GLB 模型，导入 PNG/SVG 贴花，在 3D 车身上自由拖动摆放，车身改色，导出平面图。
+<img width="939" height="638" alt="image" src="https://github.com/user-attachments/assets/6288a0c2-ec97-4083-ab3a-4efc3f4e21ca" />
+
 
 ## 快速开始
 
@@ -61,3 +63,5 @@
 ## 技术
 
 纯静态页面，Three.js 0.160 从 CDN 加载。无构建步骤，无后端。GitHub Pages 直接跑。
+
+本项目由搭载Deeseek V4 Pro的OpenHanako和搭载Opus 4.7的Claude Code联袂呈现😂
