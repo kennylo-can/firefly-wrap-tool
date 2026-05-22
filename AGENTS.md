@@ -49,7 +49,7 @@ All mutable state lives in `const state = { ... }` at the top of the JS module.
 | `carBounds` | {center, size} | Bounding box after auto-lift |
 | `viewMode` | 'view'\|'edit' | Orbit-only vs decal manipulation |
 | `paintMode` | boolean | True when Paint tab is active |
-| `paintGroup` | string | 'body'\|'wheels'\|'glass'\|'calipers'\|'trim'\|'picker' |
+| `paintGroup` | string | 'body'\|'wheels'\|'glass'\|'calipers'\|'trim'\|'interior'\|'picker' |
 | `paintColor` | string | Hex color for next paint operation |
 | `pickedMeshes` | Set<Mesh> | Meshes selected via picker mode |
 | `explodeAmount` | number | Current explode offset in world units |
@@ -64,7 +64,7 @@ All mutable state lives in `const state = { ... }` at the top of the JS module.
 |---|---|
 | `originalPos` | THREE.Vector3 — mesh position before any explode |
 | `explodeDir` | THREE.Vector3 (normalized) — direction to push mesh when exploding |
-| `group` | 'body'\|'wheels'\|'glass'\|'calipers'\|'trim' — heuristic from mesh name |
+| `group` | 'body'\|'wheels'\|'glass'\|'calipers'\|'trim'\|'interior' — heuristic from mesh name |
 | `originalColors` | string[] — hex color per material slot at load time |
 | `originalProps` | object[] — roughness/metalness/clearcoat per material at load time |
 
@@ -274,3 +274,7 @@ Added a "仅车身分解" (body-only decompose) mode inspired by teslawrap.art's
 **CSS added**: `.btn.active` style for toggle button highlight
 
 **Future agents**: The decompose mode only affects mesh visibility and explode level. It does NOT alter mesh geometry or decal placement. The explode slider still works independently in decompose mode. When adding new mesh groups to `classifyMesh()`, body decompose will automatically hide them (only 'body' group stays visible).
+
+### 2026-05-21 — Hanako: Interior mesh classification
+
+Added 'interior' group to `classifyMesh()`. Patterns: `interior|seat|steering|dashboard|carpet|headliner|doorpanel|console|内饰|座|方向盘|仪表|地毯|顶棚|门板`. Interior meshes are now automatically hidden in body decompose mode (since the filter is `group !== 'body'`). Added paint group button for interior.

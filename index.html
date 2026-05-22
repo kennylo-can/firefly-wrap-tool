@@ -381,6 +381,7 @@
           <button class="paint-group-btn" data-group="wheels">⚙ 轮毂</button>
           <button class="paint-group-btn" data-group="glass">🪟 玻璃</button>
           <button class="paint-group-btn" data-group="calipers">🔴 卡钳</button>
+          <button class="paint-group-btn" data-group="interior">🪑 内饰</button>
           <button class="paint-group-btn" data-group="trim">⬛ 饰条</button>
           <button class="paint-group-btn" data-group="picker">🎯 拾取面板</button>
         </div>
@@ -1346,6 +1347,7 @@ function classifyMesh(mesh) {
   if (/wheel|rim|tire|tyre|轮/.test(tags)) return 'wheels';
   if (/glass|window|windshield|玻璃|窗/.test(tags)) return 'glass';
   if (/caliper|brake|卡钳|刹车/.test(tags)) return 'calipers';
+  if (/interior|seat|steering|dashboard|carpet|headliner|doorpanel|console|内饰|座|方向盘|仪表|地毯|顶棚|门板/.test(tags)) return 'interior';
   if (/trim|chrome|grill|grille|emblem|logo|饰|镀铬|格栅/.test(tags)) return 'trim';
   if (/light|lamp|head|tail|灯/.test(tags)) return 'trim';
   return 'body';
