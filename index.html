@@ -1245,6 +1245,19 @@ function targetMeshesForPaint() {
   return state.carMeshes.filter(m => (state.meshInfo.get(m)?.group) === state.paintGroup);
 }
 
+function isPaintMaterial(mat) {
+  // Only tint materials that are actual car paint, not plastic/trim/chrome
+  if (!mat || !mat.isMaterial) return false;
+  const name = (mat.name || '').toLowerCase();
+  // Explicit paint materials from GLB
+  if (/paint|carpaint/.test(name)) return true;
+  // Generic unnamed materials with metallic properties — likely body paint
+  if (/^mat_/.test(name) && mat.metalness !== undefined && mat.metalness >= 0.5) return true;
+  // Named body paint material (not plastic, glass, etc.)
+  if (/^mat_/.test(name) && !/plastic|glass|chrome|trim|rubber|leather/.test(name)) return true;
+  return false;
+}
+
 function applyPaint(what /* 'color' | 'material' */) {
   const meshes = targetMeshesForPaint();
   if (!meshes.length) {
@@ -1257,7 +1270,10 @@ function applyPaint(what /* 'color' | 'material' */) {
     mats.forEach(mat => {
       if (!mat.isMaterial) return;
       if (what === 'color') {
-        if (mat.color) mat.color.set(state.paintColor);
+        // Only tint actual paint materials, skip plastic/trim/chrome
+        if (isPaintMaterial(mat) && mat.color) {
+          mat.color.set(state.paintColor);
+        }
       } else if (what === 'material' && state.currentMaterialPreset) {
         const p = MATERIAL_PRESETS[state.currentMaterialPreset];
         if (mat.roughness !== undefined) mat.roughness = p.roughness;

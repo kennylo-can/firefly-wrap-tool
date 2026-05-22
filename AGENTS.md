@@ -278,3 +278,9 @@ Added a "仅车身分解" (body-only decompose) mode inspired by teslawrap.art's
 ### 2026-05-21 — Hanako: Interior mesh classification
 
 Added 'interior' group to `classifyMesh()`. Patterns: `interior|seat|steering|dashboard|carpet|headliner|doorpanel|console|内饰|座|方向盘|仪表|地毯|顶棚|门板`. Interior meshes are now automatically hidden in body decompose mode (since the filter is `group !== 'body'`). Added paint group button for interior.
+
+### 2026-05-21 — Hanako: Paint material filter
+
+**Problem**: `applyPaint('color')` was tinting ALL material slots on target meshes, including non-paint materials like plastic trim, chrome, glass, etc. The GLB has 7 materials: `mat_1`-`mat_3` (generic white, probably body), `AMH7852-CARPAINT` (explicit paint), `mat_5.001` (generic), `plastic01_object` (black plastic), `mat_15` (generic).
+
+**Fix**: Added `isPaintMaterial(mat)` function that checks material name for keywords (`paint`, `carpaint`) or generic mat_ names (which are heuristically treated as paint unless they contain `plastic|glass|chrome|trim|rubber|leather`). `applyPaint('color')` now calls `isPaintMaterial()` and only tints qualifying materials. Material presets (`applyPaint('material')`) still apply to all materials on the target mesh (roughness/metalness can be safely set on any PBR material).
