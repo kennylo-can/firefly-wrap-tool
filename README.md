@@ -7,6 +7,7 @@
 ## 快速开始
 
 打开 `index.html`，模型自动加载。不需要拖文件。
+直接在线访问 https://kennylo-can.github.io/firefly-wrap-tool/ 可直接使用
 
 ## 功能
 
